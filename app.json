@@ -1,0 +1,79 @@
+{
+  "expo": {
+    "name": "Driver App",
+    "slug": "driver-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.driverapp",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "نحتاج إلى موقعك لتوصيل الطلبات",
+        "NSLocationAlwaysUsageDescription": "نحتاج إلى موقعك في الخلفية لتحديث حالة التوصيل",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourcompany.driverapp",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك لتوصيل الطلبات"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
+    ],
+    "updates": {
+      "url": "https://u.expo.dev/60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
+      }
+    }
+  }
+}
