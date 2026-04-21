@@ -1,6 +1,11 @@
 name: EAS Build
 on:
   push:
+    branches: [main] 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout code
         uses: actions/checkout@v5
       - name: Setup Node.js
