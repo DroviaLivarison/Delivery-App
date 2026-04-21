@@ -41,7 +41,6 @@ The content is organized as follows:
 
 <directory_structure>
 .env.example
-.github/workflows/update.yml
 .gitignore
 App.js
 app.json
@@ -106,81 +105,12 @@ echo "MAPBOX_ACCESS_TOKEN=your_token_here" > .env.example
 echo "API_URL=https://backend-walid-yahaya.onrender.com/api/v1" >> .env.example
 </file>
 
-<file path=".github/workflows/update.yml">
-name: EAS Update
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: 🏗 Setup Expo
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      - name: 📦 Install dependencies
-        run: npm ci
-
-      - name: 🚀 Create EAS Update
-        run: eas update --auto --non-interactive
-</file>
-
 <file path=".gitignore">
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
 node_modules/
 
-# Expo
 .expo/
-dist/
-web-build/
-expo-env.d.ts
 
-# Native
-.kotlin/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
-*.tsbuildinfo
-
-# generated native folders
-/ios
-/android
+package-lock.json
 </file>
 
 <file path="App.js">
@@ -214,6 +144,118 @@ export default function App() {
 }
 </file>
 
+<file path="app.json">
+{
+  "expo": {
+    "name": "Driver App",
+    "slug": "driver-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.driverapp",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "نحتاج إلى موقعك لتوصيل الطلبات",
+        "NSLocationAlwaysUsageDescription": "نحتاج إلى موقعك في الخلفية لتحديث حالة التوصيل",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourcompany.driverapp",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك لتوصيل الطلبات"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
+    ],
+    "updates": {
+      "url": "https://u.expo.dev/60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
+      }
+    }
+  }
+}
+</file>
+
+<file path="eas.json">
+{
+  "cli": {
+    "version": ">= 18.5.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
+</file>
+
 <file path="index.js">
 import { registerRootComponent } from 'expo';
 
@@ -223,6 +265,317 @@ import App from './App';
 // It also ensures that whether you load the app in Expo Go or in a native build,
 // the environment is set up appropriately
 registerRootComponent(App);
+</file>
+
+<file path="package.json">
+{
+  "name": "driver-app",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "11.4.1",
+    "@react-navigation/bottom-tabs": "^6.6.1",
+    "@react-navigation/native": "^6.1.18",
+    "@react-navigation/native-stack": "^6.11.0",
+    "axios": "^1.14.0",
+    "expo": "^54.0.33",
+    "expo-build-properties": "~1.0.10",
+    "expo-dev-client": "~6.0.20",
+    "expo-device": "~8.0.10",
+    "expo-font": "~14.0.11",
+    "expo-haptics": "~15.0.8",
+    "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.16",
+    "expo-secure-store": "~15.0.8",
+    "expo-status-bar": "~3.0.9",
+    "expo-updates": "~29.0.16",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-maps": "1.20.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "socket.io-client": "^4.8.3",
+    "zustand": "^4.5.7"
+  }
+}
+</file>
+
+<file path="src/api/auth.js">
+import apiClient from './client';
+import { saveSecureItem, deleteSecureItem } from '../utils/storage';
+
+// تسجيل الدخول
+export const login = async (phone, password) => {
+  try {
+    const response = await apiClient.post('/auth/login', {
+      phone,
+      password,
+    });
+     
+    const { accessToken, refreshToken, user } = response.data.data;
+    
+    await saveSecureItem('accessToken', accessToken);
+    await saveSecureItem('refreshToken', refreshToken);
+    
+    return { success: true, user };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.response?.data?.message || 'حدث خطأ في تسجيل الدخول',
+    };
+  }
+};
+
+// تسجيل الخروج
+export const logout = async () => {
+  try {
+    await apiClient.post('/auth/logout');
+  } catch (error) {
+    console.error('Logout error:', error);
+  } finally {
+    await deleteSecureItem('accessToken');
+    await deleteSecureItem('refreshToken');
+  }
+};
+
+// تغيير كلمة المرور
+export const changePassword = async (currentPassword, newPassword, confirmPassword) => {
+  try {
+    const response = await apiClient.post('/auth/change-password', {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    });
+    return { success: true, message: response.data.message };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.response?.data?.message || 'فشل تغيير كلمة المرور',
+    };
+  }
+};
+
+// الحصول على بيانات المندوب
+export const getDriverProfile = async () => {
+  try {
+    const response = await apiClient.get('/driver/profile');
+    return { success: true, data: response.data.data };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.response?.data?.message || 'فشل جلب البيانات',
+    };
+  }
+};
+
+// تحديث بيانات المندوب
+export const updateDriverProfile = async (profileData) => {
+  try {
+    const response = await apiClient.put('/driver/profile', profileData);
+    return { success: true, data: response.data.data };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.response?.data?.message || 'فشل تحديث البيانات',
+    };
+  }
+};
+</file>
+
+<file path="src/api/chat.js">
+// src/api/chat.js - الإصدار النهائي مع التصدير الصحيح
+import apiClient from './client';
+import { getSecureItem } from '../utils/storage';
+
+class ChatService {
+  constructor() {
+    this.baseUrl = '/chat';
+    this.currentUserId = null;
+  }
+
+  async getCurrentUserId() {
+    if (!this.currentUserId) {
+      try {
+        const token = await getSecureItem('accessToken');
+        if (token) {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          this.currentUserId = payload.id;
+        }
+      } catch (e) {
+        console.error('Error decoding token:', e);
+      }
+    }
+    return this.currentUserId;
+  }
+
+  // ✅ جلب المحادثات
+  async getConversations() {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/conversations`);
+      
+      let conversations = [];
+      
+      if (response.data?.data?.conversations) {
+        conversations = response.data.data.conversations;
+      } else if (response.data?.data) {
+        conversations = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        conversations = response.data;
+      }
+      
+      const normalizedConversations = await this.normalizeConversations(conversations);
+      
+      return { 
+        success: true, 
+        data: normalizedConversations 
+      };
+    } catch (error) {
+      console.error('Get conversations error:', error);
+      return { 
+        success: true, 
+        data: [] 
+      };
+    }
+  }
+
+  async sendMessage(conversationId, content, type = 'text') {
+    try {
+      const response = await apiClient.post(`${this.baseUrl}/conversations/${conversationId}/messages/text`, {
+        content
+      });
+      
+      let message = response.data?.data?.message || response.data?.data || response.data;
+      
+      return { 
+        success: true, 
+        data: await this.normalizeMessage(message) 
+      };
+    } catch (error) {
+      console.error('Send message error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل إرسال الرسالة',
+      };
+    }
+  }
+
+  async getMessages(conversationId, page = 1, limit = 50) {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/conversations/${conversationId}/messages`, {
+        params: { page, limit },
+      });
+      
+      let messages = response.data?.data?.messages || response.data?.data || [];
+      
+      return { 
+        success: true, 
+        data: await this.normalizeMessages(messages),
+        pagination: response.data?.data?.pagination
+      };
+    } catch (error) {
+      console.error('Get messages error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل جلب الرسائل',
+      };
+    }
+  }
+
+  async markMessagesAsRead(conversationId) {
+    try {
+      await apiClient.put(`${this.baseUrl}/conversations/${conversationId}/read`);
+      return { success: true };
+    } catch (error) {
+      console.error('Mark read error:', error);
+      return { success: false };
+    }
+  }
+
+  // ========== دوال مساعدة ==========
+  
+  async normalizeConversations(conversations) {
+    const currentUserId = await this.getCurrentUserId();
+    
+    if (!Array.isArray(conversations)) {
+      return [];
+    }
+    
+    return conversations.map(conv => ({
+      id: conv._id,
+      title: conv.title || 'محادثة',
+      type: conv.type || 'direct',
+      participants: conv.participants || [],
+      lastMessage: conv.lastMessage,
+      lastMessageText: conv.lastMessage?.content?.text || '',
+      lastActivity: conv.lastActivity || conv.updatedAt,
+      unreadCount: conv.unreadCount || 0,
+      updatedAt: conv.updatedAt,
+      createdAt: conv.createdAt,
+      otherParticipant: conv.otherParticipant || conv.participants?.find(p => p._id !== currentUserId)
+    }));
+  }
+
+  async normalizeMessages(messages) {
+    const currentUserId = await this.getCurrentUserId();
+    
+    if (!Array.isArray(messages)) {
+      return [];
+    }
+    
+    return messages.map(msg => ({
+      id: msg._id,
+      content: msg.content?.text || '',
+      type: msg.type || 'text',
+      sender: msg.sender,
+      isMine: msg.sender?._id === currentUserId || msg.sender === currentUserId,
+      createdAt: msg.delivery?.sentAt || msg.createdAt,
+      time: this.formatTime(msg.delivery?.sentAt || msg.createdAt)
+    }));
+  }
+
+  async normalizeMessage(message) {
+    const currentUserId = await this.getCurrentUserId();
+    
+    if (!message) return null;
+    
+    return {
+      id: message._id,
+      content: message.content?.text || '',
+      type: message.type || 'text',
+      sender: message.sender,
+      isMine: message.sender?._id === currentUserId || message.sender === currentUserId,
+      createdAt: message.delivery?.sentAt || message.createdAt,
+      time: this.formatTime(message.delivery?.sentAt || message.createdAt)
+    };
+  }
+
+  formatTime(date) {
+    if (!date) return '';
+    const d = new Date(date);
+    return d.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+  }
+}
+
+// ✅ إنشاء مثيل واحد من الخدمة
+const chatService = new ChatService();
+
+// ✅ تصدير الدوال بشكل فردي للاستخدام المباشر
+export const getConversations = () => chatService.getConversations();
+export const getMessages = (conversationId, page, limit) => chatService.getMessages(conversationId, page, limit);
+export const sendMessage = (conversationId, content) => chatService.sendMessage(conversationId, content);
+export const markMessagesAsRead = (conversationId) => chatService.markMessagesAsRead(conversationId);
+
+// ✅ تصدير الخدمة كاملة أيضاً (للحالات التي تحتاجها)
+export default chatService;
 </file>
 
 <file path="src/api/client.js">
@@ -729,6 +1082,161 @@ class DriverService {
 export default new DriverService();
 </file>
 
+<file path="src/api/location.js">
+// src/api/location.js - الإصدار النهائي المصحح
+import * as Location from 'expo-location';
+import DriverService from './driverService';
+import { getSocket, emitEvent } from './socket';
+
+class LocationService {
+  constructor() {
+    this.watchId = null;
+    this.isTracking = false;
+    this.lastLocation = null;
+  }
+
+  // الحصول على الموقع الحالي من الجهاز
+  async getCurrentLocation() {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        return { success: false, message: 'سماح الوصول إلى الموقع مطلوب' };
+      }
+      
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+      
+      return {
+        success: true,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy,
+        heading: location.coords.heading,
+        speed: location.coords.speed,
+        timestamp: location.timestamp
+      };
+    } catch (error) {
+      console.error('Get current location error:', error);
+      return {
+        success: false,
+        message: 'فشل الحصول على الموقع'
+      };
+    }
+  }
+
+  // تحديث الموقع إلى الخادم
+  async updateLocationToServer(latitude = null, longitude = null, orderId = null) {
+    try {
+      let lat = latitude;
+      let lng = longitude;
+      
+      if (!lat || !lng) {
+        const location = await this.getCurrentLocation();
+        if (!location.success) return { success: false };
+        lat = location.latitude;
+        lng = location.longitude;
+      }
+      
+      this.lastLocation = { latitude: lat, longitude: lng, timestamp: new Date() };
+      
+      // إرسال عبر HTTP
+      const result = await DriverService.updateLocation(lat, lng, orderId);
+      
+      // إرسال عبر Socket للتحديث المباشر
+      const socket = getSocket();
+      if (socket && socket.connected) {
+        emitEvent('driver:location:updated', {
+          latitude: lat,
+          longitude: lng,
+          orderId,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Update location to server error:', error);
+      return { success: false };
+    }
+  }
+
+  // بدء تتبع الموقع
+  async startTracking(updateInterval = 10000, onLocationUpdate = null) {
+    if (this.isTracking) {
+      console.log('Location tracking already started');
+      return;
+    }
+    
+    this.isTracking = true;
+    
+    // تحديث فوري
+    const initialLocation = await this.updateLocationToServer();
+    if (onLocationUpdate && initialLocation.success) {
+      onLocationUpdate(initialLocation);
+    }
+    
+    // بدء التتبع الدوري
+    this.watchId = setInterval(async () => {
+      const result = await this.updateLocationToServer();
+      if (onLocationUpdate && result.success) {
+        onLocationUpdate(result);
+      }
+    }, updateInterval);
+    
+    console.log('Location tracking started');
+  }
+
+  // إيقاف تتبع الموقع
+  async stopTracking() {
+    if (this.watchId) {
+      clearInterval(this.watchId);
+      this.watchId = null;
+    }
+    
+    this.isTracking = false;
+    console.log('Location tracking stopped');
+  }
+
+  // الحصول على موقع الطلب
+  async getOrderLocation(orderId) {
+    return await DriverService.getOrderLocation(orderId);
+  }
+
+  // تغيير حالة الاتصال
+  async updateOnlineStatus(isOnline) {
+    return await DriverService.toggleAvailability(isOnline);
+  }
+
+  // الحصول على آخر موقع معروف
+  getLastLocation() {
+    return this.lastLocation;
+  }
+
+  // حساب المسافة بين نقطتين
+  calculateDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  // تنسيق المسافة للعرض
+  formatDistance(distanceKm) {
+    if (distanceKm < 1) {
+      return `${Math.round(distanceKm * 1000)} م`;
+    }
+    return `${distanceKm.toFixed(1)} كم`;
+  }
+}
+
+export default new LocationService();
+</file>
+
 <file path="src/api/orders.js">
 // src/api/orders.js - الإصدار المصحح بالكامل
 import apiClient from './client';
@@ -787,6 +1295,203 @@ export const getOrderDetails = async (orderId) => {
   const order = await DriverService.getOrderDetails(orderId);
   return { success: !!order, data: order };
 };
+</file>
+
+<file path="src/api/socket.js">
+// src/api/socket.js - الإصدار المصحح
+import { io } from 'socket.io-client';
+import { getSecureItem } from '../utils/storage';
+
+const SOCKET_URL = 'https://backend-walid-yahaya.onrender.com';
+
+let socket = null;
+let listeners = new Map();
+
+// الاتصال بخادم WebSocket
+export const connectSocket = async () => {
+  const token = await getSecureItem('accessToken');
+  if (!token) {
+    console.log('No token found, cannot connect socket');
+    return null;
+  }
+
+  if (socket && socket.connected) {
+    console.log('Socket already connected');
+    return socket;
+  }
+
+  socket = io(SOCKET_URL, {
+    transports: ['websocket'],
+    auth: { token },
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+  });
+
+  socket.on('connect', () => {
+    console.log('Socket connected successfully');
+  });
+
+  socket.on('connect_error', (error) => {
+    console.log('Socket connection error:', error.message);
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log('Socket disconnected:', reason);
+  });
+
+  return socket;
+};
+
+// قطع الاتصال
+export const disconnectSocket = () => {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+    listeners.clear();
+  }
+};
+
+// الحصول على كائن socket
+export const getSocket = () => socket;
+
+// الاستماع للأحداث
+export const onEvent = (eventName, callback) => {
+  if (socket) {
+    socket.on(eventName, callback);
+    if (!listeners.has(eventName)) {
+      listeners.set(eventName, []);
+    }
+    listeners.get(eventName).push(callback);
+  }
+};
+
+// إزالة الاستماع
+export const offEvent = (eventName, callback) => {
+  if (socket) {
+    socket.off(eventName, callback);
+    if (listeners.has(eventName)) {
+      const callbacks = listeners.get(eventName).filter(cb => cb !== callback);
+      if (callbacks.length === 0) {
+        listeners.delete(eventName);
+      } else {
+        listeners.set(eventName, callbacks);
+      }
+    }
+  }
+};
+
+// إرسال حدث
+export const emitEvent = (eventName, data) => {
+  if (socket && socket.connected) {
+    socket.emit(eventName, data);
+    return true;
+  }
+  return false;
+};
+
+// ========== أحداث المندوب ==========
+
+// استماع لحدث طلب جديد
+export const onNewOrder = (callback) => {
+  onEvent('driver:new-order', callback);
+};
+
+// استماع لحدث تحديث الطلب
+export const onOrderUpdated = (callback) => {
+  onEvent('order:status:updated', callback);
+};
+
+// استماع لحدث إلغاء الطلب
+export const onOrderCancelled = (callback) => {
+  onEvent('driver:order-cancelled', callback);
+};
+
+// استماع لحدث طلب موقع
+export const onDriverLocationRequest = (callback) => {
+  onEvent('driver:location:request', callback);
+};
+
+// إرسال تحديث الموقع
+export const emitLocationUpdate = (latitude, longitude, orderId = null) => {
+  emitEvent('driver:location:updated', { latitude, longitude, orderId });
+};
+</file>
+
+<file path="src/components/chat/ChatBubble.js">
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { colors } from '../../styles/colors';
+import { typography } from '../../styles/typography';
+
+export default function ChatBubble({ message }) {
+  const isMyMessage = message.isMine;
+  
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <View style={[styles.container, isMyMessage ? styles.myMessage : styles.otherMessage]}>
+      <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble]}>
+        <Text style={[styles.text, isMyMessage ? styles.myText : styles.otherText]}>
+          {message.content}
+        </Text>
+        <Text style={[styles.time, isMyMessage ? styles.myTime : styles.otherTime]}>
+          {formatTime(message.createdAt)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: 12,
+    flexDirection: 'row',
+  },
+  myMessage: {
+    justifyContent: 'flex-end',
+  },
+  otherMessage: {
+    justifyContent: 'flex-start',
+  },
+  bubble: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 20,
+  },
+  myBubble: {
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: 4,
+  },
+  otherBubble: {
+    backgroundColor: colors.surfaceVariant,
+    borderBottomLeftRadius: 4,
+  },
+  text: {
+    fontSize: typography.body2,
+    lineHeight: typography.lineHeightBody2,
+  },
+  myText: {
+    color: colors.surface,
+  },
+  otherText: {
+    color: colors.text,
+  },
+  time: {
+    fontSize: typography.caption,
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  myTime: {
+    color: colors.primaryLight,
+  },
+  otherTime: {
+    color: colors.textSecondary,
+  },
+});
 </file>
 
 <file path="src/components/chat/ChatInput.js">
@@ -2495,6 +3200,141 @@ const styles = StyleSheet.create({
 });
 </file>
 
+<file path="src/hooks/useLocation.js">
+import { useEffect, useRef, useState, useCallback } from 'react';
+import LocationService from '../api/location';
+import DriverService from '../api/driverService';
+import { getSocket, onEvent, offEvent } from '../api/socket';
+
+export const useLocation = (isOnline = true, updateInterval = 15000) => { // ✅ زيادة الوقت إلى 15 ثانية
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [isTracking, setIsTracking] = useState(false);
+  const [error, setError] = useState(null);
+  const intervalRef = useRef(null);
+  const isUpdatingRef = useRef(false);
+
+  const updateLocation = useCallback(async () => {
+    if (!isOnline) return null;
+    if (isUpdatingRef.current) {
+      console.log('⏳ Location update already in progress, skipping...');
+      return null;
+    }
+    
+    isUpdatingRef.current = true;
+    
+    try {
+      const result = await LocationService.updateLocationToServer();
+      
+      if (result.success) {
+        const locationData = result.data?.data || result.data;
+        const newLocation = {
+          latitude: locationData?.location?.latitude || locationData?.latitude,
+          longitude: locationData?.location?.longitude || locationData?.longitude,
+          timestamp: new Date()
+        };
+        setCurrentLocation(newLocation);
+        return result;
+      } else {
+        setError(result.message);
+        return null;
+      }
+    } catch (error) {
+      console.error('Update location error:', error);
+      return null;
+    } finally {
+      isUpdatingRef.current = false;
+    }
+  }, [isOnline]);
+
+  const updateOnlineStatus = useCallback(async (status) => {
+    try {
+      const result = await DriverService.toggleAvailability(status);
+      if (result.success) {
+        if (status) {
+          await startTracking();
+        } else {
+          await stopTracking();
+        }
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Update online status error:', error);
+      return false;
+    }
+  }, []);
+
+  const startTracking = useCallback(async () => {
+    if (!isOnline) {
+      console.log('Driver is offline, not starting tracking');
+      return;
+    }
+    
+    if (isTracking) {
+      console.log('Tracking already started');
+      return;
+    }
+    
+    setError(null);
+    setIsTracking(true);
+    
+    await updateLocation();
+    
+    intervalRef.current = setInterval(async () => {
+      await updateLocation();
+    }, updateInterval);
+    
+    console.log(`Location tracking started with interval ${updateInterval}ms`);
+  }, [isOnline, isTracking, updateLocation, updateInterval]);
+
+  const stopTracking = useCallback(async () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    
+    await LocationService.stopTracking();
+    setIsTracking(false);
+    console.log('Location tracking stopped');
+  }, []);
+
+  const setupSocketListeners = useCallback(() => {
+    const socket = getSocket();
+    if (!socket) return;
+    
+    onEvent('driver:location:request', async (data) => {
+      console.log('📍 Location requested:', data);
+      await updateLocation();
+    });
+  }, [updateLocation]);
+
+  useEffect(() => {
+    if (isOnline) {
+      startTracking();
+      setupSocketListeners();
+    }
+    
+    return () => {
+      stopTracking();
+      offEvent('driver:location:request');
+    };
+  }, [isOnline, startTracking, stopTracking, setupSocketListeners]);
+
+  return {
+    currentLocation,
+    isTracking,
+    error,
+    startTracking,
+    stopTracking,
+    updateLocation,
+    updateLocationToServer: updateLocation,
+    updateOnlineStatus
+  };
+};
+
+export default useLocation;
+</file>
+
 <file path="src/hooks/useNotification.js">
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
@@ -3170,21 +4010,26 @@ export default function ActiveOrderScreen() {
     );
   };
 
-  const getNextAction = () => {
-    switch (currentStatus) {
-      case ORDER_STATUS.PENDING:
-        return { title: '✅ قبول الطلب', action: () => updateStatus(ORDER_STATUS.ACCEPTED) };
-      case ORDER_STATUS.ACCEPTED:
-        return { title: '👨‍🍳 جاهز للتوصيل', action: () => updateStatus(ORDER_STATUS.READY) };
-      case ORDER_STATUS.READY:
-        return { title: '🚚 بدء التوصيل', action: handleStartDelivery };
-      case ORDER_STATUS.PICKED:
-        return { title: '📦 تم التوصيل', action: () => updateStatus(ORDER_STATUS.DELIVERED) };
-      default:
-        return null;
-    }
-  };
-
+const getNextAction = () => {
+  switch (currentStatus) {
+    case ORDER_STATUS.PENDING:
+      return { title: '✅ قبول الطلب', action: () => updateStatus(ORDER_STATUS.ACCEPTED) };
+    case ORDER_STATUS.ACCEPTED:
+      // ✅ في حالة ACCEPTED، المندوب ينتظر المتجر ليغير الحالة إلى READY
+      return { 
+        title: '⏳ جاري تجهيز الطلب', 
+        action: null, 
+        disabled: true,
+        note: 'الطلب قيد التحضير من قبل المتجر'
+      };
+    case ORDER_STATUS.READY:
+      return { title: '🚚 بدء التوصيل', action: handleStartDelivery };
+    case ORDER_STATUS.PICKED:
+      return { title: '📦 تم التوصيل', action: () => updateStatus(ORDER_STATUS.DELIVERED) };
+    default:
+      return null;
+  }
+};
   if (loadingOrder) {
     return (
       <SafeAreaView style={globalStyles.safeArea}>
@@ -4628,1637 +5473,6 @@ const styles = StyleSheet.create({
 });
 </file>
 
-<file path="src/screens/main/ProfileScreen.js">
-// src/screens/main/ProfileScreen.js - الإصدار المصحح
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Modal,
-  TextInput,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import Header from '../../components/common/Header';
-import Button from '../../components/common/Button';
-import Card from '../../components/common/Card';
-import LoadingOverlay from '../../components/common/LoadingOverlay';
-import useAuthStore from '../../store/authStore';
-import { changePassword, updateDriverProfile } from '../../api/auth';
-import DriverService from '../../api/driverService';
-import { colors } from '../../styles/colors';
-import { typography } from '../../styles/typography';
-import { globalStyles } from '../../styles/globalStyles';
-
-export default function ProfileScreen() {
-  const { user, logout, updateProfile, stats, setStats } = useAuthStore();
-  const [loading, setLoading] = useState(false);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
-  
-  const [formData, setFormData] = useState({
-    name: user?.name || '',
-    phone: user?.phone || '',
-    email: user?.email || '',
-  });
-  
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-
-  const loadStats = async () => {
-    try {
-      const history = await DriverService.getOrderHistory(1, 100);
-      const completedOrders = history.orders?.filter(o => o.status === 'delivered') || [];
-      const earnings = completedOrders.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayOrders = history.orders?.filter(o => {
-        const orderDate = new Date(o.createdAt);
-        orderDate.setHours(0, 0, 0, 0);
-        return o.status === 'delivered' && orderDate.getTime() === today.getTime();
-      }).length || 0;
-      
-      setStats({
-        todayOrders: todayOrders,
-        totalOrders: completedOrders.length,
-        rating: user?.rating || 5,
-        earnings: earnings,
-      });
-    } catch (error) {
-      console.error('Load stats error:', error);
-    }
-  };
-
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const handleUpdateProfile = async () => {
-    setLoading(true);
-    const success = await updateProfile(formData);
-    setLoading(false);
-    
-    if (success) {
-      Alert.alert('نجاح', 'تم تحديث الملف الشخصي');
-      setEditModalVisible(false);
-    } else {
-      Alert.alert('خطأ', 'فشل تحديث الملف');
-    }
-  };
-
-  const handleChangePassword = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert('خطأ', 'كلمة المرور الجديدة غير متطابقة');
-      return;
-    }
-    
-    if (passwordData.newPassword.length < 6) {
-      Alert.alert('خطأ', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      return;
-    }
-    
-    setLoading(true);
-    const result = await changePassword(
-      passwordData.currentPassword,
-      passwordData.newPassword,
-      passwordData.confirmPassword
-    );
-    setLoading(false);
-    
-    if (result.success) {
-      Alert.alert('نجاح', 'تم تغيير كلمة المرور');
-      setPasswordModalVisible(false);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } else {
-      Alert.alert('خطأ', result.message);
-    }
-  };
-
-  const handleLogout = () => {
-    Alert.alert(
-      'تسجيل الخروج',
-      'هل أنت متأكد من تسجيل الخروج؟',
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        { text: 'تسجيل خروج', onPress: () => logout(), style: 'destructive' },
-      ]
-    );
-  };
-
-  const StatCard = ({ icon, value, label }) => (
-    <View style={styles.statCard}>
-      <Ionicons name={icon} size={24} color={colors.primary} />
-      <Text style={styles.statNumber}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-
-  return (
-    <SafeAreaView style={globalStyles.safeArea}>
-      <LoadingOverlay visible={loading} />
-      <Header title="الملف الشخصي" showNotification />
-      
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user?.name?.charAt(0) || 'م'}</Text>
-          </View>
-          <Text style={styles.name}>{user?.name || 'مندوب'}</Text>
-          <Text style={styles.phone}>{user?.phone}</Text>
-          <Text style={styles.email}>{user?.email || 'البريد الإلكتروني غير مضاف'}</Text>
-          
-          <View style={styles.editButtons}>
-            <Button
-              title="تعديل الملف"
-              onPress={() => setEditModalVisible(true)}
-              size="small"
-              style={styles.editButton}
-            />
-            <Button
-              title="تغيير كلمة المرور"
-              onPress={() => setPasswordModalVisible(true)}
-              variant="outline"
-              size="small"
-              style={styles.editButton}
-            />
-          </View>
-        </View>
-        
-        <View style={styles.statsContainer}>
-          <StatCard icon="today-outline" value={stats.todayOrders} label="طلبات اليوم" />
-          <StatCard icon="time-outline" value={stats.totalOrders} label="إجمالي الطلبات" />
-          <StatCard icon="star-outline" value={`${stats.rating}★`} label="التقييم" />
-          <StatCard icon="cash-outline" value={`${stats.earnings}`} label="الأرباح" />
-        </View>
-        
-        <Card style={styles.infoCard}>
-          <Text style={styles.infoTitle}>معلومات الحساب</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>نوع الحساب:</Text>
-            <Text style={styles.infoValue}>مندوب توصيل</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>حالة الحساب:</Text>
-            <Text style={[styles.infoValue, user?.isVerified ? styles.verified : styles.unverified]}>
-              {user?.isVerified ? 'موثق ✓' : 'غير موثق'}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>تاريخ الانضمام:</Text>
-            <Text style={styles.infoValue}>
-              {new Date(user?.createdAt).toLocaleDateString('ar')}
-            </Text>
-          </View>
-        </Card>
-        
-        <Button
-          title="تسجيل الخروج"
-          onPress={handleLogout}
-          variant="danger"
-          style={styles.logoutButton}
-        />
-      </ScrollView>
-      
-      <Modal visible={editModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>تعديل الملف الشخصي</Text>
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="الاسم"
-              value={formData.name}
-              onChangeText={(text) => setFormData({ ...formData, name: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="رقم الهاتف"
-              value={formData.phone}
-              onChangeText={(text) => setFormData({ ...formData, phone: text })}
-              keyboardType="phone-pad"
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="البريد الإلكتروني"
-              value={formData.email}
-              onChangeText={(text) => setFormData({ ...formData, email: text })}
-              keyboardType="email-address"
-            />
-            
-            <View style={styles.modalButtons}>
-              <Button
-                title="إلغاء"
-                onPress={() => setEditModalVisible(false)}
-                variant="outline"
-                style={styles.modalButton}
-              />
-              <Button
-                title="حفظ"
-                onPress={handleUpdateProfile}
-                style={styles.modalButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-      
-      <Modal visible={passwordModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>تغيير كلمة المرور</Text>
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="كلمة المرور الحالية"
-              secureTextEntry
-              value={passwordData.currentPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, currentPassword: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="كلمة المرور الجديدة"
-              secureTextEntry
-              value={passwordData.newPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="تأكيد كلمة المرور الجديدة"
-              secureTextEntry
-              value={passwordData.confirmPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })}
-            />
-            
-            <View style={styles.modalButtons}>
-              <Button
-                title="إلغاء"
-                onPress={() => setPasswordModalVisible(false)}
-                variant="outline"
-                style={styles.modalButton}
-              />
-              <Button
-                title="تغيير"
-                onPress={handleChangePassword}
-                style={styles.modalButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  profileHeader: {
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatarText: {
-    fontSize: 40,
-    fontWeight: typography.bold,
-    color: colors.surface,
-  },
-  name: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 4,
-  },
-  phone: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-    marginBottom: 2,
-  },
-  email: {
-    fontSize: typography.caption,
-    color: colors.textDisabled,
-    marginBottom: 12,
-  },
-  editButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  editButton: {
-    paddingHorizontal: 16,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 20,
-    margin: 16,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-  },
-  statCard: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
-    color: colors.primary,
-    marginTop: 8,
-  },
-  statLabel: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  infoCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  infoTitle: {
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 12,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  infoLabel: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-  },
-  infoValue: {
-    fontSize: typography.body2,
-    color: colors.text,
-    fontWeight: typography.medium,
-  },
-  verified: {
-    color: colors.success,
-  },
-  unverified: {
-    color: colors.danger,
-  },
-  logoutButton: {
-    marginHorizontal: 16,
-    marginBottom: 32,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 20,
-    width: '90%',
-  },
-  modalTitle: {
-    fontSize: typography.h5,
-    fontWeight: typography.bold,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: typography.body2,
-    textAlign: 'right',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-  },
-});
-</file>
-
-<file path="src/styles/globalStyles.js">
-import { StyleSheet, Platform } from 'react-native';
-import { colors } from './colors';
-import { typography } from './typography';
-
-export const globalStyles = StyleSheet.create({
-  // Containers
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  contentContainer: {
-    flexGrow: 1,
-    padding: 16,
-  },
-  
-  // Cards
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.shadow,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
-  },
-  
-  // Typography
-  title: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: typography.h6,
-    fontWeight: typography.medium,
-    color: colors.textSecondary,
-    marginBottom: 4,
-  },
-  bodyText: {
-    fontSize: typography.body2,
-    color: colors.text,
-    lineHeight: typography.lineHeightBody2,
-  },
-  caption: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  
-  // Buttons
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.shadow,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  buttonText: {
-    color: colors.surface,
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-  },
-  buttonOutline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  buttonOutlineText: {
-    color: colors.primary,
-  },
-  buttonDanger: {
-    backgroundColor: colors.danger,
-  },
-  
-  // Inputs
-  input: {
-    backgroundColor: colors.surfaceVariant,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: typography.body1,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 16,
-  },
-  inputFocused: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-  },
-  inputError: {
-    borderColor: colors.danger,
-  },
-  
-  // Status
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-  },
-  statusText: {
-    fontSize: typography.caption,
-    fontWeight: typography.bold,
-  },
-  
-  // Flex
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  column: {
-    flexDirection: 'column',
-  },
-  center: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  
-  // Spacing
-  m0: { margin: 0 },
-  m4: { margin: 4 },
-  m8: { margin: 8 },
-  m12: { margin: 12 },
-  m16: { margin: 16 },
-  m24: { margin: 24 },
-  
-  p0: { padding: 0 },
-  p4: { padding: 4 },
-  p8: { padding: 8 },
-  p12: { padding: 12 },
-  p16: { padding: 16 },
-  p24: { padding: 24 },
-  
-  // Divider
-  divider: {
-    height: 1,
-    backgroundColor: colors.divider,
-    marginVertical: 16,
-  },
-  
-  // Loading
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  
-  // Empty State
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyText: {
-    fontSize: typography.body1,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 16,
-  },
-});
-</file>
-
-<file path="src/styles/typography.js">
-import { Platform } from 'react-native';
-
-export const typography = {
-  // Font Families
-  fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-  fontFamilyBold: Platform.OS === 'ios' ? 'System' : 'Roboto-Bold',
-  
-  // Font Sizes
-  h1: 32,
-  h2: 28,
-  h3: 24,
-  h4: 20,
-  h5: 18,
-  h6: 16,
-  body1: 16,
-  body2: 14,
-  caption: 12,
-  overline: 10,
-  
-  // Line Heights
-  lineHeightH1: 40,
-  lineHeightH2: 36,
-  lineHeightH3: 32,
-  lineHeightH4: 28,
-  lineHeightH5: 24,
-  lineHeightH6: 24,
-  lineHeightBody1: 24,
-  lineHeightBody2: 20,
-  lineHeightCaption: 16,
-  
-  // Font Weights
-  thin: '100',
-  light: '300',
-  regular: '400',
-  medium: '500',
-  bold: '700',
-  black: '900',
-};
-</file>
-
-<file path="src/utils/constants.js">
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://backend-walid-yahaya.onrender.com/api/v1';
-export const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://backend-walid-yahaya.onrender.com';
-
-// حالة الطلبات
-export const ORDER_STATUS = {
-  PENDING: 'pending',
-  ACCEPTED: 'accepted',
-  READY: 'ready',
-  PICKED: 'picked',
-  DELIVERED: 'delivered',
-  CANCELLED: 'cancelled',
-};
-
-export const ORDER_STATUS_AR = {
-  [ORDER_STATUS.PENDING]: 'قيد الانتظار',
-  [ORDER_STATUS.ACCEPTED]: 'تم القبول',
-  [ORDER_STATUS.READY]: 'جاهز للتوصيل',
-  [ORDER_STATUS.PICKED]: 'تم الاستلام',
-  [ORDER_STATUS.DELIVERED]: 'تم التوصيل',
-  [ORDER_STATUS.CANCELLED]: 'ملغي',
-};
-
-export const ORDER_STATUS_COLORS = {
-  [ORDER_STATUS.PENDING]: '#FF9800',
-  [ORDER_STATUS.ACCEPTED]: '#2196F3',
-  [ORDER_STATUS.READY]: '#9C27B0',
-  [ORDER_STATUS.PICKED]: '#3F51B5',
-  [ORDER_STATUS.DELIVERED]: '#4CAF50',
-  [ORDER_STATUS.CANCELLED]: '#F44336',
-};
-</file>
-
-<file path="src/utils/notifications.js">
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
-import * as Device from 'expo-device';
-
-// تكوين الإشعارات
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
-// طلب صلاحيات الإشعارات والحصول على token
-export const registerForPushNotifications = async () => {
-  if (!Device.isDevice) {
-    console.log('Must use physical device for Push Notifications');
-    return null;
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') {
-    console.log('Failed to get push token for push notification!');
-    return null;
-  }
-
-  const token = await Notifications.getExpoPushTokenAsync({
-    projectId: 'your-project-id', // استبدل بمعرف مشروعك
-  });
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
-    });
-  }
-
-  return token.data;
-};
-
-// إرسال إشعار محلي
-export const sendLocalNotification = async (title, body, data = {}) => {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      data,
-      sound: true,
-    },
-    trigger: null, // يعرض فوراً
-  });
-};
-
-// الاستماع للإشعارات الواردة
-export const addNotificationListener = (callback) => {
-  const subscription = Notifications.addNotificationReceivedListener(callback);
-  return subscription;
-};
-
-// الاستماع عند الضغط على الإشعار
-export const addNotificationResponseListener = (callback) => {
-  const subscription = Notifications.addNotificationResponseReceivedListener(callback);
-  return subscription;
-};
-</file>
-
-<file path="src/utils/storage.js">
-import * as SecureStore from 'expo-secure-store';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// حفظ البيانات الحساسة (التوكن)
-export const saveSecureItem = async (key, value) => {
-  try {
-    await SecureStore.setItemAsync(key, value);
-    return true;
-  } catch (error) {
-    console.error('Error saving secure item:', error);
-    return false;
-  }
-};
-
-// قراءة البيانات الحساسة
-export const getSecureItem = async (key) => {
-  try {
-    return await SecureStore.getItemAsync(key);
-  } catch (error) {
-    console.error('Error getting secure item:', error);
-    return null;
-  }
-};
-
-// حذف البيانات الحساسة
-export const deleteSecureItem = async (key) => {
-  try {
-    await SecureStore.deleteItemAsync(key);
-    return true;
-  } catch (error) {
-    console.error('Error deleting secure item:', error);
-    return false;
-  }
-};
-
-// حفظ بيانات عادية
-export const saveItem = async (key, value) => {
-  try {
-    await AsyncStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch (error) {
-    console.error('Error saving item:', error);
-    return false;
-  }
-};
-
-// قراءة بيانات عادية
-export const getItem = async (key) => {
-  try {
-    const value = await AsyncStorage.getItem(key);
-    return value ? JSON.parse(value) : null;
-  } catch (error) {
-    console.error('Error getting item:', error);
-    return null;
-  }
-};
-
-// حذف بيانات عادية
-export const deleteItem = async (key) => {
-  try {
-    await AsyncStorage.removeItem(key);
-    return true;
-  } catch (error) {
-    console.error('Error deleting item:', error);
-    return false;
-  }
-};
-</file>
-
-<file path="eas.json">
-{
-  "cli": {
-    "version": ">= 18.5.0",
-    "appVersionSource": "remote"
-  },
-  "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal"
-    },
-    "preview": {
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "production": {
-      "autoIncrement": true,
-      "android": {
-        "buildType": "app-bundle"
-      }
-    }
-  },
-  "submit": {
-    "production": {}
-  }
-}
-</file>
-
-<file path="src/api/auth.js">
-import apiClient from './client';
-import { saveSecureItem, deleteSecureItem } from '../utils/storage';
-
-// تسجيل الدخول
-export const login = async (phone, password) => {
-  try {
-    const response = await apiClient.post('/auth/login', {
-      phone,
-      password,
-    });
-     
-    const { accessToken, refreshToken, user } = response.data.data;
-    
-    await saveSecureItem('accessToken', accessToken);
-    await saveSecureItem('refreshToken', refreshToken);
-    
-    return { success: true, user };
-  } catch (error) {
-    return {
-      success: false,
-      message: error.response?.data?.message || 'حدث خطأ في تسجيل الدخول',
-    };
-  }
-};
-
-// تسجيل الخروج
-export const logout = async () => {
-  try {
-    await apiClient.post('/auth/logout');
-  } catch (error) {
-    console.error('Logout error:', error);
-  } finally {
-    await deleteSecureItem('accessToken');
-    await deleteSecureItem('refreshToken');
-  }
-};
-
-// تغيير كلمة المرور
-export const changePassword = async (currentPassword, newPassword, confirmPassword) => {
-  try {
-    const response = await apiClient.post('/auth/change-password', {
-      currentPassword,
-      newPassword,
-      confirmPassword,
-    });
-    return { success: true, message: response.data.message };
-  } catch (error) {
-    return {
-      success: false,
-      message: error.response?.data?.message || 'فشل تغيير كلمة المرور',
-    };
-  }
-};
-
-// الحصول على بيانات المندوب
-export const getDriverProfile = async () => {
-  try {
-    const response = await apiClient.get('/driver/profile');
-    return { success: true, data: response.data.data };
-  } catch (error) {
-    return {
-      success: false,
-      message: error.response?.data?.message || 'فشل جلب البيانات',
-    };
-  }
-};
-
-// تحديث بيانات المندوب
-export const updateDriverProfile = async (profileData) => {
-  try {
-    const response = await apiClient.put('/driver/profile', profileData);
-    return { success: true, data: response.data.data };
-  } catch (error) {
-    return {
-      success: false,
-      message: error.response?.data?.message || 'فشل تحديث البيانات',
-    };
-  }
-};
-</file>
-
-<file path="src/api/chat.js">
-// src/api/chat.js - الإصدار النهائي مع التصدير الصحيح
-import apiClient from './client';
-import { getSecureItem } from '../utils/storage';
-
-class ChatService {
-  constructor() {
-    this.baseUrl = '/chat';
-    this.currentUserId = null;
-  }
-
-  async getCurrentUserId() {
-    if (!this.currentUserId) {
-      try {
-        const token = await getSecureItem('accessToken');
-        if (token) {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          this.currentUserId = payload.id;
-        }
-      } catch (e) {
-        console.error('Error decoding token:', e);
-      }
-    }
-    return this.currentUserId;
-  }
-
-  // ✅ جلب المحادثات
-  async getConversations() {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/conversations`);
-      
-      let conversations = [];
-      
-      if (response.data?.data?.conversations) {
-        conversations = response.data.data.conversations;
-      } else if (response.data?.data) {
-        conversations = response.data.data;
-      } else if (Array.isArray(response.data)) {
-        conversations = response.data;
-      }
-      
-      const normalizedConversations = await this.normalizeConversations(conversations);
-      
-      return { 
-        success: true, 
-        data: normalizedConversations 
-      };
-    } catch (error) {
-      console.error('Get conversations error:', error);
-      return { 
-        success: true, 
-        data: [] 
-      };
-    }
-  }
-
-  async sendMessage(conversationId, content, type = 'text') {
-    try {
-      const response = await apiClient.post(`${this.baseUrl}/conversations/${conversationId}/messages/text`, {
-        content
-      });
-      
-      let message = response.data?.data?.message || response.data?.data || response.data;
-      
-      return { 
-        success: true, 
-        data: await this.normalizeMessage(message) 
-      };
-    } catch (error) {
-      console.error('Send message error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل إرسال الرسالة',
-      };
-    }
-  }
-
-  async getMessages(conversationId, page = 1, limit = 50) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/conversations/${conversationId}/messages`, {
-        params: { page, limit },
-      });
-      
-      let messages = response.data?.data?.messages || response.data?.data || [];
-      
-      return { 
-        success: true, 
-        data: await this.normalizeMessages(messages),
-        pagination: response.data?.data?.pagination
-      };
-    } catch (error) {
-      console.error('Get messages error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل جلب الرسائل',
-      };
-    }
-  }
-
-  async markMessagesAsRead(conversationId) {
-    try {
-      await apiClient.put(`${this.baseUrl}/conversations/${conversationId}/read`);
-      return { success: true };
-    } catch (error) {
-      console.error('Mark read error:', error);
-      return { success: false };
-    }
-  }
-
-  // ========== دوال مساعدة ==========
-  
-  async normalizeConversations(conversations) {
-    const currentUserId = await this.getCurrentUserId();
-    
-    if (!Array.isArray(conversations)) {
-      return [];
-    }
-    
-    return conversations.map(conv => ({
-      id: conv._id,
-      title: conv.title || 'محادثة',
-      type: conv.type || 'direct',
-      participants: conv.participants || [],
-      lastMessage: conv.lastMessage,
-      lastMessageText: conv.lastMessage?.content?.text || '',
-      lastActivity: conv.lastActivity || conv.updatedAt,
-      unreadCount: conv.unreadCount || 0,
-      updatedAt: conv.updatedAt,
-      createdAt: conv.createdAt,
-      otherParticipant: conv.otherParticipant || conv.participants?.find(p => p._id !== currentUserId)
-    }));
-  }
-
-  async normalizeMessages(messages) {
-    const currentUserId = await this.getCurrentUserId();
-    
-    if (!Array.isArray(messages)) {
-      return [];
-    }
-    
-    return messages.map(msg => ({
-      id: msg._id,
-      content: msg.content?.text || '',
-      type: msg.type || 'text',
-      sender: msg.sender,
-      isMine: msg.sender?._id === currentUserId || msg.sender === currentUserId,
-      createdAt: msg.delivery?.sentAt || msg.createdAt,
-      time: this.formatTime(msg.delivery?.sentAt || msg.createdAt)
-    }));
-  }
-
-  async normalizeMessage(message) {
-    const currentUserId = await this.getCurrentUserId();
-    
-    if (!message) return null;
-    
-    return {
-      id: message._id,
-      content: message.content?.text || '',
-      type: message.type || 'text',
-      sender: message.sender,
-      isMine: message.sender?._id === currentUserId || message.sender === currentUserId,
-      createdAt: message.delivery?.sentAt || message.createdAt,
-      time: this.formatTime(message.delivery?.sentAt || message.createdAt)
-    };
-  }
-
-  formatTime(date) {
-    if (!date) return '';
-    const d = new Date(date);
-    return d.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-  }
-}
-
-// ✅ إنشاء مثيل واحد من الخدمة
-const chatService = new ChatService();
-
-// ✅ تصدير الدوال بشكل فردي للاستخدام المباشر
-export const getConversations = () => chatService.getConversations();
-export const getMessages = (conversationId, page, limit) => chatService.getMessages(conversationId, page, limit);
-export const sendMessage = (conversationId, content) => chatService.sendMessage(conversationId, content);
-export const markMessagesAsRead = (conversationId) => chatService.markMessagesAsRead(conversationId);
-
-// ✅ تصدير الخدمة كاملة أيضاً (للحالات التي تحتاجها)
-export default chatService;
-</file>
-
-<file path="src/api/location.js">
-// src/api/location.js - الإصدار النهائي المصحح
-import * as Location from 'expo-location';
-import DriverService from './driverService';
-import { getSocket, emitEvent } from './socket';
-
-class LocationService {
-  constructor() {
-    this.watchId = null;
-    this.isTracking = false;
-    this.lastLocation = null;
-  }
-
-  // الحصول على الموقع الحالي من الجهاز
-  async getCurrentLocation() {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        return { success: false, message: 'سماح الوصول إلى الموقع مطلوب' };
-      }
-      
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High
-      });
-      
-      return {
-        success: true,
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy,
-        heading: location.coords.heading,
-        speed: location.coords.speed,
-        timestamp: location.timestamp
-      };
-    } catch (error) {
-      console.error('Get current location error:', error);
-      return {
-        success: false,
-        message: 'فشل الحصول على الموقع'
-      };
-    }
-  }
-
-  // تحديث الموقع إلى الخادم
-  async updateLocationToServer(latitude = null, longitude = null, orderId = null) {
-    try {
-      let lat = latitude;
-      let lng = longitude;
-      
-      if (!lat || !lng) {
-        const location = await this.getCurrentLocation();
-        if (!location.success) return { success: false };
-        lat = location.latitude;
-        lng = location.longitude;
-      }
-      
-      this.lastLocation = { latitude: lat, longitude: lng, timestamp: new Date() };
-      
-      // إرسال عبر HTTP
-      const result = await DriverService.updateLocation(lat, lng, orderId);
-      
-      // إرسال عبر Socket للتحديث المباشر
-      const socket = getSocket();
-      if (socket && socket.connected) {
-        emitEvent('driver:location:updated', {
-          latitude: lat,
-          longitude: lng,
-          orderId,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('Update location to server error:', error);
-      return { success: false };
-    }
-  }
-
-  // بدء تتبع الموقع
-  async startTracking(updateInterval = 10000, onLocationUpdate = null) {
-    if (this.isTracking) {
-      console.log('Location tracking already started');
-      return;
-    }
-    
-    this.isTracking = true;
-    
-    // تحديث فوري
-    const initialLocation = await this.updateLocationToServer();
-    if (onLocationUpdate && initialLocation.success) {
-      onLocationUpdate(initialLocation);
-    }
-    
-    // بدء التتبع الدوري
-    this.watchId = setInterval(async () => {
-      const result = await this.updateLocationToServer();
-      if (onLocationUpdate && result.success) {
-        onLocationUpdate(result);
-      }
-    }, updateInterval);
-    
-    console.log('Location tracking started');
-  }
-
-  // إيقاف تتبع الموقع
-  async stopTracking() {
-    if (this.watchId) {
-      clearInterval(this.watchId);
-      this.watchId = null;
-    }
-    
-    this.isTracking = false;
-    console.log('Location tracking stopped');
-  }
-
-  // الحصول على موقع الطلب
-  async getOrderLocation(orderId) {
-    return await DriverService.getOrderLocation(orderId);
-  }
-
-  // تغيير حالة الاتصال
-  async updateOnlineStatus(isOnline) {
-    return await DriverService.toggleAvailability(isOnline);
-  }
-
-  // الحصول على آخر موقع معروف
-  getLastLocation() {
-    return this.lastLocation;
-  }
-
-  // حساب المسافة بين نقطتين
-  calculateDistance(lat1, lng1, lat2, lng2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  }
-
-  // تنسيق المسافة للعرض
-  formatDistance(distanceKm) {
-    if (distanceKm < 1) {
-      return `${Math.round(distanceKm * 1000)} م`;
-    }
-    return `${distanceKm.toFixed(1)} كم`;
-  }
-}
-
-export default new LocationService();
-</file>
-
-<file path="src/api/socket.js">
-// src/api/socket.js - الإصدار المصحح
-import { io } from 'socket.io-client';
-import { getSecureItem } from '../utils/storage';
-
-const SOCKET_URL = 'https://backend-walid-yahaya.onrender.com';
-
-let socket = null;
-let listeners = new Map();
-
-// الاتصال بخادم WebSocket
-export const connectSocket = async () => {
-  const token = await getSecureItem('accessToken');
-  if (!token) {
-    console.log('No token found, cannot connect socket');
-    return null;
-  }
-
-  if (socket && socket.connected) {
-    console.log('Socket already connected');
-    return socket;
-  }
-
-  socket = io(SOCKET_URL, {
-    transports: ['websocket'],
-    auth: { token },
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-  });
-
-  socket.on('connect', () => {
-    console.log('Socket connected successfully');
-  });
-
-  socket.on('connect_error', (error) => {
-    console.log('Socket connection error:', error.message);
-  });
-
-  socket.on('disconnect', (reason) => {
-    console.log('Socket disconnected:', reason);
-  });
-
-  return socket;
-};
-
-// قطع الاتصال
-export const disconnectSocket = () => {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-    listeners.clear();
-  }
-};
-
-// الحصول على كائن socket
-export const getSocket = () => socket;
-
-// الاستماع للأحداث
-export const onEvent = (eventName, callback) => {
-  if (socket) {
-    socket.on(eventName, callback);
-    if (!listeners.has(eventName)) {
-      listeners.set(eventName, []);
-    }
-    listeners.get(eventName).push(callback);
-  }
-};
-
-// إزالة الاستماع
-export const offEvent = (eventName, callback) => {
-  if (socket) {
-    socket.off(eventName, callback);
-    if (listeners.has(eventName)) {
-      const callbacks = listeners.get(eventName).filter(cb => cb !== callback);
-      if (callbacks.length === 0) {
-        listeners.delete(eventName);
-      } else {
-        listeners.set(eventName, callbacks);
-      }
-    }
-  }
-};
-
-// إرسال حدث
-export const emitEvent = (eventName, data) => {
-  if (socket && socket.connected) {
-    socket.emit(eventName, data);
-    return true;
-  }
-  return false;
-};
-
-// ========== أحداث المندوب ==========
-
-// استماع لحدث طلب جديد
-export const onNewOrder = (callback) => {
-  onEvent('driver:new-order', callback);
-};
-
-// استماع لحدث تحديث الطلب
-export const onOrderUpdated = (callback) => {
-  onEvent('order:status:updated', callback);
-};
-
-// استماع لحدث إلغاء الطلب
-export const onOrderCancelled = (callback) => {
-  onEvent('driver:order-cancelled', callback);
-};
-
-// استماع لحدث طلب موقع
-export const onDriverLocationRequest = (callback) => {
-  onEvent('driver:location:request', callback);
-};
-
-// إرسال تحديث الموقع
-export const emitLocationUpdate = (latitude, longitude, orderId = null) => {
-  emitEvent('driver:location:updated', { latitude, longitude, orderId });
-};
-</file>
-
-<file path="src/components/chat/ChatBubble.js">
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../../styles/colors';
-import { typography } from '../../styles/typography';
-
-export default function ChatBubble({ message }) {
-  const isMyMessage = message.isMine;
-  
-  const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
-  };
-
-  return (
-    <View style={[styles.container, isMyMessage ? styles.myMessage : styles.otherMessage]}>
-      <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble]}>
-        <Text style={[styles.text, isMyMessage ? styles.myText : styles.otherText]}>
-          {message.content}
-        </Text>
-        <Text style={[styles.time, isMyMessage ? styles.myTime : styles.otherTime]}>
-          {formatTime(message.createdAt)}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 12,
-    flexDirection: 'row',
-  },
-  myMessage: {
-    justifyContent: 'flex-end',
-  },
-  otherMessage: {
-    justifyContent: 'flex-start',
-  },
-  bubble: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 20,
-  },
-  myBubble: {
-    backgroundColor: colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  otherBubble: {
-    backgroundColor: colors.surfaceVariant,
-    borderBottomLeftRadius: 4,
-  },
-  text: {
-    fontSize: typography.body2,
-    lineHeight: typography.lineHeightBody2,
-  },
-  myText: {
-    color: colors.surface,
-  },
-  otherText: {
-    color: colors.text,
-  },
-  time: {
-    fontSize: typography.caption,
-    marginTop: 4,
-    alignSelf: 'flex-end',
-  },
-  myTime: {
-    color: colors.primaryLight,
-  },
-  otherTime: {
-    color: colors.textSecondary,
-  },
-});
-</file>
-
-<file path="src/hooks/useLocation.js">
-import { useEffect, useRef, useState, useCallback } from 'react';
-import LocationService from '../api/location';
-import DriverService from '../api/driverService';
-import { getSocket, onEvent, offEvent } from '../api/socket';
-
-export const useLocation = (isOnline = true, updateInterval = 15000) => { // ✅ زيادة الوقت إلى 15 ثانية
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [isTracking, setIsTracking] = useState(false);
-  const [error, setError] = useState(null);
-  const intervalRef = useRef(null);
-  const isUpdatingRef = useRef(false);
-
-  const updateLocation = useCallback(async () => {
-    if (!isOnline) return null;
-    if (isUpdatingRef.current) {
-      console.log('⏳ Location update already in progress, skipping...');
-      return null;
-    }
-    
-    isUpdatingRef.current = true;
-    
-    try {
-      const result = await LocationService.updateLocationToServer();
-      
-      if (result.success) {
-        const locationData = result.data?.data || result.data;
-        const newLocation = {
-          latitude: locationData?.location?.latitude || locationData?.latitude,
-          longitude: locationData?.location?.longitude || locationData?.longitude,
-          timestamp: new Date()
-        };
-        setCurrentLocation(newLocation);
-        return result;
-      } else {
-        setError(result.message);
-        return null;
-      }
-    } catch (error) {
-      console.error('Update location error:', error);
-      return null;
-    } finally {
-      isUpdatingRef.current = false;
-    }
-  }, [isOnline]);
-
-  const updateOnlineStatus = useCallback(async (status) => {
-    try {
-      const result = await DriverService.toggleAvailability(status);
-      if (result.success) {
-        if (status) {
-          await startTracking();
-        } else {
-          await stopTracking();
-        }
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Update online status error:', error);
-      return false;
-    }
-  }, []);
-
-  const startTracking = useCallback(async () => {
-    if (!isOnline) {
-      console.log('Driver is offline, not starting tracking');
-      return;
-    }
-    
-    if (isTracking) {
-      console.log('Tracking already started');
-      return;
-    }
-    
-    setError(null);
-    setIsTracking(true);
-    
-    await updateLocation();
-    
-    intervalRef.current = setInterval(async () => {
-      await updateLocation();
-    }, updateInterval);
-    
-    console.log(`Location tracking started with interval ${updateInterval}ms`);
-  }, [isOnline, isTracking, updateLocation, updateInterval]);
-
-  const stopTracking = useCallback(async () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    
-    await LocationService.stopTracking();
-    setIsTracking(false);
-    console.log('Location tracking stopped');
-  }, []);
-
-  const setupSocketListeners = useCallback(() => {
-    const socket = getSocket();
-    if (!socket) return;
-    
-    onEvent('driver:location:request', async (data) => {
-      console.log('📍 Location requested:', data);
-      await updateLocation();
-    });
-  }, [updateLocation]);
-
-  useEffect(() => {
-    if (isOnline) {
-      startTracking();
-      setupSocketListeners();
-    }
-    
-    return () => {
-      stopTracking();
-      offEvent('driver:location:request');
-    };
-  }, [isOnline, startTracking, stopTracking, setupSocketListeners]);
-
-  return {
-    currentLocation,
-    isTracking,
-    error,
-    startTracking,
-    stopTracking,
-    updateLocation,
-    updateLocationToServer: updateLocation,
-    updateOnlineStatus
-  };
-};
-
-export default useLocation;
-</file>
-
 <file path="src/screens/main/OrdersScreen.js">
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -7134,6 +6348,436 @@ const styles = StyleSheet.create({
 });
 </file>
 
+<file path="src/screens/main/ProfileScreen.js">
+// src/screens/main/ProfileScreen.js - الإصدار المصحح
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  TextInput,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import Header from '../../components/common/Header';
+import Button from '../../components/common/Button';
+import Card from '../../components/common/Card';
+import LoadingOverlay from '../../components/common/LoadingOverlay';
+import useAuthStore from '../../store/authStore';
+import { changePassword, updateDriverProfile } from '../../api/auth';
+import DriverService from '../../api/driverService';
+import { colors } from '../../styles/colors';
+import { typography } from '../../styles/typography';
+import { globalStyles } from '../../styles/globalStyles';
+
+export default function ProfileScreen() {
+  const { user, logout, updateProfile, stats, setStats } = useAuthStore();
+  const [loading, setLoading] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '',
+    email: user?.email || '',
+  });
+  
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  const loadStats = async () => {
+    try {
+      const history = await DriverService.getOrderHistory(1, 100);
+      const completedOrders = history.orders?.filter(o => o.status === 'delivered') || [];
+      const earnings = completedOrders.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayOrders = history.orders?.filter(o => {
+        const orderDate = new Date(o.createdAt);
+        orderDate.setHours(0, 0, 0, 0);
+        return o.status === 'delivered' && orderDate.getTime() === today.getTime();
+      }).length || 0;
+      
+      setStats({
+        todayOrders: todayOrders,
+        totalOrders: completedOrders.length,
+        rating: user?.rating || 5,
+        earnings: earnings,
+      });
+    } catch (error) {
+      console.error('Load stats error:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const handleUpdateProfile = async () => {
+    setLoading(true);
+    const success = await updateProfile(formData);
+    setLoading(false);
+    
+    if (success) {
+      Alert.alert('نجاح', 'تم تحديث الملف الشخصي');
+      setEditModalVisible(false);
+    } else {
+      Alert.alert('خطأ', 'فشل تحديث الملف');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      Alert.alert('خطأ', 'كلمة المرور الجديدة غير متطابقة');
+      return;
+    }
+    
+    if (passwordData.newPassword.length < 6) {
+      Alert.alert('خطأ', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+    
+    setLoading(true);
+    const result = await changePassword(
+      passwordData.currentPassword,
+      passwordData.newPassword,
+      passwordData.confirmPassword
+    );
+    setLoading(false);
+    
+    if (result.success) {
+      Alert.alert('نجاح', 'تم تغيير كلمة المرور');
+      setPasswordModalVisible(false);
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } else {
+      Alert.alert('خطأ', result.message);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'تسجيل الخروج',
+      'هل أنت متأكد من تسجيل الخروج؟',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'تسجيل خروج', onPress: () => logout(), style: 'destructive' },
+      ]
+    );
+  };
+
+  const StatCard = ({ icon, value, label }) => (
+    <View style={styles.statCard}>
+      <Ionicons name={icon} size={24} color={colors.primary} />
+      <Text style={styles.statNumber}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={globalStyles.safeArea}>
+      <LoadingOverlay visible={loading} />
+      <Header title="الملف الشخصي" showNotification />
+      
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.profileHeader}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{user?.name?.charAt(0) || 'م'}</Text>
+          </View>
+          <Text style={styles.name}>{user?.name || 'مندوب'}</Text>
+          <Text style={styles.phone}>{user?.phone}</Text>
+          <Text style={styles.email}>{user?.email || 'البريد الإلكتروني غير مضاف'}</Text>
+          
+          <View style={styles.editButtons}>
+            <Button
+              title="تعديل الملف"
+              onPress={() => setEditModalVisible(true)}
+              size="small"
+              style={styles.editButton}
+            />
+            <Button
+              title="تغيير كلمة المرور"
+              onPress={() => setPasswordModalVisible(true)}
+              variant="outline"
+              size="small"
+              style={styles.editButton}
+            />
+          </View>
+        </View>
+        
+        <View style={styles.statsContainer}>
+          <StatCard icon="today-outline" value={stats.todayOrders} label="طلبات اليوم" />
+          <StatCard icon="time-outline" value={stats.totalOrders} label="إجمالي الطلبات" />
+          <StatCard icon="star-outline" value={`${stats.rating}★`} label="التقييم" />
+          <StatCard icon="cash-outline" value={`${stats.earnings}`} label="الأرباح" />
+        </View>
+        
+        <Card style={styles.infoCard}>
+          <Text style={styles.infoTitle}>معلومات الحساب</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>نوع الحساب:</Text>
+            <Text style={styles.infoValue}>مندوب توصيل</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الحساب:</Text>
+            <Text style={[styles.infoValue, user?.isVerified ? styles.verified : styles.unverified]}>
+              {user?.isVerified ? 'موثق ✓' : 'غير موثق'}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>تاريخ الانضمام:</Text>
+            <Text style={styles.infoValue}>
+              {new Date(user?.createdAt).toLocaleDateString('ar')}
+            </Text>
+          </View>
+        </Card>
+        
+        <Button
+          title="تسجيل الخروج"
+          onPress={handleLogout}
+          variant="danger"
+          style={styles.logoutButton}
+        />
+      </ScrollView>
+      
+      <Modal visible={editModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>تعديل الملف الشخصي</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              placeholder="الاسم"
+              value={formData.name}
+              onChangeText={(text) => setFormData({ ...formData, name: text })}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="رقم الهاتف"
+              value={formData.phone}
+              onChangeText={(text) => setFormData({ ...formData, phone: text })}
+              keyboardType="phone-pad"
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="البريد الإلكتروني"
+              value={formData.email}
+              onChangeText={(text) => setFormData({ ...formData, email: text })}
+              keyboardType="email-address"
+            />
+            
+            <View style={styles.modalButtons}>
+              <Button
+                title="إلغاء"
+                onPress={() => setEditModalVisible(false)}
+                variant="outline"
+                style={styles.modalButton}
+              />
+              <Button
+                title="حفظ"
+                onPress={handleUpdateProfile}
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+      
+      <Modal visible={passwordModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>تغيير كلمة المرور</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              placeholder="كلمة المرور الحالية"
+              secureTextEntry
+              value={passwordData.currentPassword}
+              onChangeText={(text) => setPasswordData({ ...passwordData, currentPassword: text })}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="كلمة المرور الجديدة"
+              secureTextEntry
+              value={passwordData.newPassword}
+              onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="تأكيد كلمة المرور الجديدة"
+              secureTextEntry
+              value={passwordData.confirmPassword}
+              onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })}
+            />
+            
+            <View style={styles.modalButtons}>
+              <Button
+                title="إلغاء"
+                onPress={() => setPasswordModalVisible(false)}
+                variant="outline"
+                style={styles.modalButton}
+              />
+              <Button
+                title="تغيير"
+                onPress={handleChangePassword}
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  profileHeader: {
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  avatarText: {
+    fontSize: 40,
+    fontWeight: typography.bold,
+    color: colors.surface,
+  },
+  name: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  phone: {
+    fontSize: typography.body2,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  email: {
+    fontSize: typography.caption,
+    color: colors.textDisabled,
+    marginBottom: 12,
+  },
+  editButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  editButton: {
+    paddingHorizontal: 16,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 20,
+    margin: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+  },
+  statCard: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.primary,
+    marginTop: 8,
+  },
+  statLabel: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  infoCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  infoTitle: {
+    fontSize: typography.body1,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  infoLabel: {
+    fontSize: typography.body2,
+    color: colors.textSecondary,
+  },
+  infoValue: {
+    fontSize: typography.body2,
+    color: colors.text,
+    fontWeight: typography.medium,
+  },
+  verified: {
+    color: colors.success,
+  },
+  unverified: {
+    color: colors.danger,
+  },
+  logoutButton: {
+    marginHorizontal: 16,
+    marginBottom: 32,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+  },
+  modalTitle: {
+    fontSize: typography.h5,
+    fontWeight: typography.bold,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: typography.body2,
+    textAlign: 'right',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 8,
+  },
+  modalButton: {
+    flex: 1,
+  },
+});
+</file>
+
 <file path="src/store/authStore.js">
 import { create } from 'zustand';
 import DriverService from '../api/driverService';
@@ -7367,128 +7011,419 @@ export const colors = {
 };
 </file>
 
-<file path="app.json">
-{
-  "expo": {
-    "name": "Driver App",
-    "slug": "driver-app",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": ["**/*"],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.driverapp",
-      "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "نحتاج إلى موقعك لتوصيل الطلبات",
-        "NSLocationAlwaysUsageDescription": "نحتاج إلى موقعك في الخلفية لتحديث حالة التوصيل",
-        "UIBackgroundModes": ["location", "fetch"]
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+<file path="src/styles/globalStyles.js">
+import { StyleSheet, Platform } from 'react-native';
+import { colors } from './colors';
+import { typography } from './typography';
+
+export const globalStyles = StyleSheet.create({
+  // Containers
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  contentContainer: {
+    flexGrow: 1,
+    padding: 16,
+  },
+  
+  // Cards
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
       },
-      "package": "com.yourcompany.driverapp",
-      "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
-      ]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك لتوصيل الطلبات"
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#ffffff"
-        }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0"
-          },
-          "ios": {
-            "deploymentTarget": "15.1"
-          }
-        }
-      ]
-    ],
-    "updates": {
-      "url": "https://u.expo.dev/60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
-    },
-    "runtimeVersion": {
-      "policy": "sdkVersion"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
-      }
-    }
-  }
-}
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  
+  // Typography
+  title: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: typography.h6,
+    fontWeight: typography.medium,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  bodyText: {
+    fontSize: typography.body2,
+    color: colors.text,
+    lineHeight: typography.lineHeightBody2,
+  },
+  caption: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+  },
+  
+  // Buttons
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  buttonText: {
+    color: colors.surface,
+    fontSize: typography.body1,
+    fontWeight: typography.bold,
+  },
+  buttonOutline: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  buttonOutlineText: {
+    color: colors.primary,
+  },
+  buttonDanger: {
+    backgroundColor: colors.danger,
+  },
+  
+  // Inputs
+  input: {
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: typography.body1,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 16,
+  },
+  inputFocused: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  inputError: {
+    borderColor: colors.danger,
+  },
+  
+  // Status
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  statusText: {
+    fontSize: typography.caption,
+    fontWeight: typography.bold,
+  },
+  
+  // Flex
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  column: {
+    flexDirection: 'column',
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Spacing
+  m0: { margin: 0 },
+  m4: { margin: 4 },
+  m8: { margin: 8 },
+  m12: { margin: 12 },
+  m16: { margin: 16 },
+  m24: { margin: 24 },
+  
+  p0: { padding: 0 },
+  p4: { padding: 4 },
+  p8: { padding: 8 },
+  p12: { padding: 12 },
+  p16: { padding: 16 },
+  p24: { padding: 24 },
+  
+  // Divider
+  divider: {
+    height: 1,
+    backgroundColor: colors.divider,
+    marginVertical: 16,
+  },
+  
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  
+  // Empty State
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyText: {
+    fontSize: typography.body1,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+});
 </file>
 
-<file path="package.json">
-{
-  "name": "driver-app",
-  "version": "1.0.0",
-  "main": "node_modules/expo/AppEntry.js",
-  "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
-  },
-  "dependencies": {
-    "@expo/vector-icons": "^15.1.1",
-    "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-native-community/netinfo": "11.4.1",
-    "@react-navigation/bottom-tabs": "^6.6.1",
-    "@react-navigation/native": "^6.1.18",
-    "@react-navigation/native-stack": "^6.11.0",
-    "axios": "^1.14.0",
-    "expo": "^54.0.33",
-    "expo-build-properties": "~1.0.10",
-    "expo-dev-client": "~6.0.20",
-    "expo-device": "~8.0.10",
-    "expo-font": "~14.0.11",
-    "expo-haptics": "~15.0.8",
-    "expo-location": "~19.0.8",
-    "expo-notifications": "~0.32.16",
-    "expo-secure-store": "~15.0.8",
-    "expo-status-bar": "~3.0.9",
-    "expo-updates": "~29.0.16",
-    "react": "19.1.0",
-    "react-native": "0.81.5",
-    "react-native-gesture-handler": "~2.28.0",
-    "react-native-maps": "1.20.1",
-    "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.16.0",
-    "socket.io-client": "^4.8.3",
-    "zustand": "^4.5.7"
+<file path="src/styles/typography.js">
+import { Platform } from 'react-native';
+
+export const typography = {
+  // Font Families
+  fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  fontFamilyBold: Platform.OS === 'ios' ? 'System' : 'Roboto-Bold',
+  
+  // Font Sizes
+  h1: 32,
+  h2: 28,
+  h3: 24,
+  h4: 20,
+  h5: 18,
+  h6: 16,
+  body1: 16,
+  body2: 14,
+  caption: 12,
+  overline: 10,
+  
+  // Line Heights
+  lineHeightH1: 40,
+  lineHeightH2: 36,
+  lineHeightH3: 32,
+  lineHeightH4: 28,
+  lineHeightH5: 24,
+  lineHeightH6: 24,
+  lineHeightBody1: 24,
+  lineHeightBody2: 20,
+  lineHeightCaption: 16,
+  
+  // Font Weights
+  thin: '100',
+  light: '300',
+  regular: '400',
+  medium: '500',
+  bold: '700',
+  black: '900',
+};
+</file>
+
+<file path="src/utils/constants.js">
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://backend-walid-yahaya.onrender.com/api/v1';
+export const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://backend-walid-yahaya.onrender.com';
+
+// حالة الطلبات
+export const ORDER_STATUS = {
+  PENDING: 'pending',
+  ACCEPTED: 'accepted',
+  READY: 'ready',
+  PICKED: 'picked',
+  DELIVERED: 'delivered',
+  CANCELLED: 'cancelled',
+};
+
+export const ORDER_STATUS_AR = {
+  [ORDER_STATUS.PENDING]: 'قيد الانتظار',
+  [ORDER_STATUS.ACCEPTED]: 'تم القبول',
+  [ORDER_STATUS.READY]: 'جاهز للتوصيل',
+  [ORDER_STATUS.PICKED]: 'تم الاستلام',
+  [ORDER_STATUS.DELIVERED]: 'تم التوصيل',
+  [ORDER_STATUS.CANCELLED]: 'ملغي',
+};
+
+export const ORDER_STATUS_COLORS = {
+  [ORDER_STATUS.PENDING]: '#FF9800',
+  [ORDER_STATUS.ACCEPTED]: '#2196F3',
+  [ORDER_STATUS.READY]: '#9C27B0',
+  [ORDER_STATUS.PICKED]: '#3F51B5',
+  [ORDER_STATUS.DELIVERED]: '#4CAF50',
+  [ORDER_STATUS.CANCELLED]: '#F44336',
+};
+</file>
+
+<file path="src/utils/notifications.js">
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import * as Device from 'expo-device';
+
+// تكوين الإشعارات
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+// طلب صلاحيات الإشعارات والحصول على token
+export const registerForPushNotifications = async () => {
+  if (!Device.isDevice) {
+    console.log('Must use physical device for Push Notifications');
+    return null;
   }
-}
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+
+  if (finalStatus !== 'granted') {
+    console.log('Failed to get push token for push notification!');
+    return null;
+  }
+
+  const token = await Notifications.getExpoPushTokenAsync({
+    projectId: 'your-project-id', // استبدل بمعرف مشروعك
+  });
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+  }
+
+  return token.data;
+};
+
+// إرسال إشعار محلي
+export const sendLocalNotification = async (title, body, data = {}) => {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      data,
+      sound: true,
+    },
+    trigger: null, // يعرض فوراً
+  });
+};
+
+// الاستماع للإشعارات الواردة
+export const addNotificationListener = (callback) => {
+  const subscription = Notifications.addNotificationReceivedListener(callback);
+  return subscription;
+};
+
+// الاستماع عند الضغط على الإشعار
+export const addNotificationResponseListener = (callback) => {
+  const subscription = Notifications.addNotificationResponseReceivedListener(callback);
+  return subscription;
+};
+</file>
+
+<file path="src/utils/storage.js">
+import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// حفظ البيانات الحساسة (التوكن)
+export const saveSecureItem = async (key, value) => {
+  try {
+    await SecureStore.setItemAsync(key, value);
+    return true;
+  } catch (error) {
+    console.error('Error saving secure item:', error);
+    return false;
+  }
+};
+
+// قراءة البيانات الحساسة
+export const getSecureItem = async (key) => {
+  try {
+    return await SecureStore.getItemAsync(key);
+  } catch (error) {
+    console.error('Error getting secure item:', error);
+    return null;
+  }
+};
+
+// حذف البيانات الحساسة
+export const deleteSecureItem = async (key) => {
+  try {
+    await SecureStore.deleteItemAsync(key);
+    return true;
+  } catch (error) {
+    console.error('Error deleting secure item:', error);
+    return false;
+  }
+};
+
+// حفظ بيانات عادية
+export const saveItem = async (key, value) => {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.error('Error saving item:', error);
+    return false;
+  }
+};
+
+// قراءة بيانات عادية
+export const getItem = async (key) => {
+  try {
+    const value = await AsyncStorage.getItem(key);
+    return value ? JSON.parse(value) : null;
+  } catch (error) {
+    console.error('Error getting item:', error);
+    return null;
+  }
+};
+
+// حذف بيانات عادية
+export const deleteItem = async (key) => {
+  try {
+    await AsyncStorage.removeItem(key);
+    return true;
+  } catch (error) {
+    console.error('Error deleting item:', error);
+    return false;
+  }
+};
 </file>
 
 </files>
