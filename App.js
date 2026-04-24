@@ -1,3 +1,4 @@
+// App.js
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -7,6 +8,9 @@ import { Platform } from 'react-native';
 import ErrorBoundary from './src/components/common/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
 import { colors } from './src/styles/colors';
+
+// ✅ استيراد مهمة الخلفية (للتسجيل)
+import './src/tasks/locationTask';
 
 export default function App() {
   return (

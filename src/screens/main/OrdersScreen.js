@@ -1,4 +1,4 @@
-// src/screens/main/OrdersScreen.js - النسخة النهائية مع الإشعارات والتحسينات
+// src/screens/main/OrdersScreen.js - النسخة النهائية النظيفة
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -12,7 +12,6 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -29,8 +28,6 @@ import { typography } from '../../styles/typography';
 import { globalStyles } from '../../styles/globalStyles';
 import OrderStatusBadge from '../../components/orders/OrderStatusBadge';
 
-const { width } = Dimensions.get('window');
-
 export default function OrdersScreen() {
   const navigation = useNavigation();
   const { sendLocalNotification, updateBadgeCount } = useNotification();
@@ -44,9 +41,9 @@ export default function OrdersScreen() {
   const [statusModalMessage, setStatusModalMessage] = useState('');
   const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
   const [notificationCount, setNotificationCount] = useState(0);
-  
+
   const { isOnline, toggleOnlineStatus, user } = useAuthStore();
-  
+
   const flatListRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const switchAnim = useRef(new Animated.Value(isOnline ? 1 : 0)).current;
@@ -54,21 +51,12 @@ export default function OrdersScreen() {
 
   const canAcceptOrders = !activeOrder && isOnline;
 
-  // ✅ تأثير التوهج للزر
   useEffect(() => {
     if (canAcceptOrders && availableOrders.length > 0) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: 800,
-            useNativeDriver: true,
-          }),
+          Animated.timing(glowAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
         ])
       ).start();
     } else {
@@ -99,22 +87,13 @@ export default function OrdersScreen() {
       await checkAccountStatus();
       await loadOrders();
     };
-
     initDriver();
 
     if (isOnline) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
         ])
       ).start();
     } else {
@@ -129,21 +108,32 @@ export default function OrdersScreen() {
       setNotificationCount(availableResult.orders?.length || 0);
       await updateBadgeCount(availableResult.orders?.length || 0);
 
-      try {
-        const activeOrderResult = await DriverService.getActiveOrder();
-        setActiveOrder(activeOrderResult);
-      } catch (activeError) {
-        setActiveOrder(null);
-      }
-    } catch (error) {
-      console.error('Load orders error:', error);
-      setAvailableOrders([]);
+      const activeOrderResult = await DriverService.getActiveOrder();
+      setActiveOrder(activeOrderResult);
+    } catch {
       setActiveOrder(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [updateBadgeCount]);
+
+
+
+
+  // أضف هذا داخل OrdersScreen component بعد تعريف loadOrders
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (isOnline && accountStatus.isActive) {
+        const shouldBeAvailable = isOnline && !activeOrder;
+        await DriverService.toggleAvailability(shouldBeAvailable);
+        console.log('🔄 Availability status updated:', shouldBeAvailable);
+      }
+    }, 10000); // ✅ كل 10 ثوانٍ
+
+    return () => clearInterval(interval);
+  }, [isOnline, activeOrder, accountStatus.isActive]);
 
   useFocusEffect(
     useCallback(() => {
@@ -158,30 +148,16 @@ export default function OrdersScreen() {
       if (isOnline && accountStatus.isActive) {
         await connectSocket();
 
-        onEvent('driver:new-order', (data) => {
+        onEvent('driver:new-order', () => {
           loadOrders();
-          sendLocalNotification(
-            '🆕 طلب جديد!',
-            `لديك طلب جديد بقيمة ${data.totalPrice || 'غير محدد'} د.ع`,
-            { type: 'new_order', orderId: data.orderId },
-            'orders'
-          );
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         });
 
-        onEvent('driver:status:changed', () => {
-          loadOrders();
-        });
+        onEvent('driver:status:changed', () => loadOrders());
 
         onEvent('order:status:updated', (data) => {
           if (data.orderId === activeOrder?.id || data.orderId === activeOrder?._id) {
             loadOrders();
-            sendLocalNotification(
-              '📦 تحديث الطلب',
-              `تم تحديث حالة الطلب #${data.orderId?.slice(-6)}`,
-              { type: 'order_update', orderId: data.orderId },
-              'orders'
-            );
           }
         });
       }
@@ -193,7 +169,7 @@ export default function OrdersScreen() {
       offEvent('driver:status:changed');
       offEvent('order:status:updated');
     };
-  }, [isOnline, loadOrders, activeOrder, accountStatus.isActive, sendLocalNotification]);
+  }, [isOnline, loadOrders, activeOrder, accountStatus.isActive]);
 
   const onRefresh = useCallback(() => {
     if (accountStatus.isActive) {
@@ -211,23 +187,15 @@ export default function OrdersScreen() {
     setProcessingId(orderId);
     try {
       const result = await DriverService.acceptOrder(orderId);
-
       if (result.success) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        sendLocalNotification(
-          '✅ تم قبول الطلب',
-          `تم قبول الطلب #${orderId.slice(-6)} بنجاح`,
-          { type: 'order_update', orderId },
-          'orders'
-        );
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert('نجاح', 'تم قبول الطلب بنجاح');
         await loadOrders();
         navigation.navigate('ActiveOrder', { orderId });
       } else {
         Alert.alert('خطأ', result.message || 'فشل قبول الطلب');
       }
-    } catch (error) {
-      console.error('Accept order error:', error);
+    } catch {
       Alert.alert('خطأ', 'حدث خطأ أثناء قبول الطلب');
     } finally {
       setProcessingId(null);
@@ -243,9 +211,8 @@ export default function OrdersScreen() {
     setProcessingId(orderId);
     try {
       const result = await DriverService.rejectOrder(orderId);
-
       if (result.success) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         setAvailableOrders(prev => prev.filter(order =>
           (order.id !== orderId && order._id !== orderId)
         ));
@@ -253,8 +220,7 @@ export default function OrdersScreen() {
       } else {
         Alert.alert('خطأ', result.message || 'فشل رفض الطلب');
       }
-    } catch (error) {
-      console.error('Reject order error:', error);
+    } catch {
       Alert.alert('خطأ', 'حدث خطأ أثناء رفض الطلب');
     } finally {
       setProcessingId(null);
@@ -266,15 +232,14 @@ export default function OrdersScreen() {
       Alert.alert('تنبيه', 'حسابك غير نشط');
       return;
     }
-    
     if (isToggling) return;
-    
+
     setIsToggling(true);
     setShowStatusModal(true);
     setStatusModalMessage(isOnline ? 'جاري قطع الاتصال...' : 'جاري الاتصال...');
-    
+
     const success = await toggleOnlineStatus();
-    
+
     if (success) {
       Animated.spring(switchAnim, {
         toValue: isOnline ? 0 : 1,
@@ -282,14 +247,7 @@ export default function OrdersScreen() {
         tension: 50,
         friction: 7,
       }).start();
-      
-      sendLocalNotification(
-        isOnline ? '🔴 غير متصل' : '🟢 متصل',
-        isOnline ? 'تم قطع الاتصال بنجاح' : 'تم الاتصال بنجاح',
-        { type: 'status_change' },
-        'default'
-      );
-      
+
       setTimeout(async () => {
         await loadOrders();
         setShowStatusModal(false);
@@ -297,7 +255,6 @@ export default function OrdersScreen() {
     } else {
       setShowStatusModal(false);
     }
-    
     setIsToggling(false);
   };
 
@@ -307,7 +264,6 @@ export default function OrdersScreen() {
     }
   };
 
-  // ✅ زر تغيير الحالة المحسن
   const StatusToggleButton = () => (
     <TouchableOpacity
       style={[
@@ -347,10 +303,8 @@ export default function OrdersScreen() {
     </TouchableOpacity>
   );
 
-  // ✅ بطاقة الطلب النشط
   const ActiveOrderCard = () => {
     if (!activeOrder) return null;
-
     const orderId = activeOrder.id || activeOrder._id;
     const displayOrderId = orderId?.slice(-8) || '00000000';
 
@@ -377,10 +331,8 @@ export default function OrdersScreen() {
     );
   };
 
-  // ✅ رأس القائمة
   const renderHeader = () => (
     <View style={styles.headerSection}>
-      {/* بطاقة حالة الاتصال */}
       <View style={[styles.statusCard, (isOnline && accountStatus.isActive) && styles.statusCardOnline]}>
         <View style={styles.statusInfo}>
           <Animated.View style={[styles.statusDotContainer, { transform: [{ scale: pulseAnim }] }]}>
@@ -396,7 +348,6 @@ export default function OrdersScreen() {
         <StatusToggleButton />
       </View>
 
-      {/* بطاقة حالة استقبال الطلبات */}
       <Animated.View style={[
         styles.availabilityCard,
         canAcceptOrders ? styles.availabilityCardActive : styles.availabilityCardInactive,
@@ -411,16 +362,16 @@ export default function OrdersScreen() {
           }),
         },
       ]}>
-        <Ionicons 
-          name={canAcceptOrders ? "checkmark-circle" : "close-circle"} 
-          size={28} 
-          color={canAcceptOrders ? colors.success : colors.danger} 
+        <Ionicons
+          name={canAcceptOrders ? "checkmark-circle" : "close-circle"}
+          size={28}
+          color={canAcceptOrders ? colors.success : colors.danger}
         />
         <View style={{ flex: 1 }}>
           <Text style={styles.availabilityLabel}>حالة استقبال الطلبات</Text>
           <Text style={[styles.availabilityValue, canAcceptOrders ? styles.availabilityActive : styles.availabilityInactive]}>
-            {!isOnline ? 'غير متاح (غير متصل)' : 
-             (activeOrder ? 'غير متاح (لديك طلب جاري)' : 'متاح ✅')}
+            {!isOnline ? 'غير متاح (غير متصل)' :
+              (activeOrder ? 'غير متاح (لديك طلب جاري)' : 'متاح ✅')}
           </Text>
         </View>
         {canAcceptOrders && availableOrders.length > 0 && (
@@ -430,7 +381,6 @@ export default function OrdersScreen() {
         )}
       </Animated.View>
 
-      {/* بطاقة المندوب */}
       <View style={styles.driverCard}>
         <View style={[styles.driverAvatar, (isOnline && accountStatus.isActive) && styles.driverAvatarOnline]}>
           <Text style={styles.driverAvatarText}>{user?.name?.charAt(0) || 'م'}</Text>
@@ -450,16 +400,12 @@ export default function OrdersScreen() {
         </View>
       </View>
 
-      {/* الطلب النشط */}
       <ActiveOrderCard />
 
-      {/* إشعار الطلبات المتاحة */}
       {(canAcceptOrders && availableOrders.length > 0 && !activeOrder) && (
         <View style={styles.ordersInfoCard}>
           <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-          <Text style={styles.ordersInfoText}>
-            {availableOrders.length} طلب جديد في انتظارك
-          </Text>
+          <Text style={styles.ordersInfoText}>{availableOrders.length} طلب جديد في انتظارك</Text>
           <TouchableOpacity onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}>
             <Ionicons name="arrow-down" size={20} color={colors.primary} />
           </TouchableOpacity>
@@ -492,8 +438,7 @@ export default function OrdersScreen() {
   return (
     <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
       <Header title="الطلبات" showNotification notificationCount={notificationCount} />
-      
-      {/* مودال التحميل */}
+
       <Modal transparent visible={showStatusModal} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -502,7 +447,7 @@ export default function OrdersScreen() {
           </View>
         </View>
       </Modal>
-      
+
       <FlatList
         ref={flatListRef}
         data={availableOrders}
@@ -529,7 +474,6 @@ export default function OrdersScreen() {
   );
 }
 
-// ✅ حالة فارغة محسنة
 const EmptyStateComponent = () => (
   <View style={styles.emptyContainer}>
     <View style={styles.emptyIconContainer}>
@@ -544,8 +488,7 @@ const styles = StyleSheet.create({
   listContent: { padding: 16 },
   emptyListContent: { flex: 1, justifyContent: 'center' },
   headerSection: { marginBottom: 16 },
-  
-  // بطاقة حالة الاتصال
+
   statusCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -571,8 +514,7 @@ const styles = StyleSheet.create({
   statusValue: { fontSize: typography.body2, fontWeight: typography.bold },
   onlineText: { color: colors.success },
   offlineText: { color: colors.danger },
-  
-  // زر التبديل المحسن
+
   statusToggleButton: {
     width: 110,
     height: 40,
@@ -602,8 +544,7 @@ const styles = StyleSheet.create({
   },
   statusToggleTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   statusToggleText: { fontSize: typography.body2, fontWeight: typography.bold, color: colors.surface },
-  
-  // بطاقة حالة استقبال الطلبات
+
   availabilityCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -631,8 +572,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.bold,
     color: colors.surface,
   },
-  
-  // بطاقة المندوب
+
   driverCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 20, padding: 16, marginBottom: 12, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   driverAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: 12, position: 'relative' },
   driverAvatarOnline: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
@@ -645,8 +585,7 @@ const styles = StyleSheet.create({
   statsBadge: { backgroundColor: colors.surfaceVariant, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24, alignItems: 'center', minWidth: 70 },
   statsNumber: { fontSize: typography.h5, fontWeight: typography.bold, color: colors.primary },
   statsLabel: { fontSize: typography.caption, color: colors.primary },
-  
-  // الطلب النشط
+
   activeOrderCard: { backgroundColor: colors.primaryLight + '10', borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.primaryLight },
   activeOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   activeOrderBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, gap: 6 },
@@ -657,23 +596,19 @@ const styles = StyleSheet.create({
   activeOrderPriceValue: { fontSize: typography.h6, fontWeight: typography.bold, color: colors.success },
   activeOrderButton: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.divider, alignItems: 'flex-end' },
   activeOrderButtonText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium },
-  
-  // إشعار الطلبات
+
   ordersInfoCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.primaryLight + '10', borderWidth: 1, borderColor: colors.primaryLight, padding: 14, borderRadius: 16, marginBottom: 12 },
   ordersInfoText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium, flex: 1 },
-  
-  // حالة فارغة
+
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 60 },
   emptyIconContainer: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   emptyTitle: { fontSize: 20, fontWeight: typography.bold, color: colors.textDisabled, marginBottom: 8 },
   emptySubtext: { fontSize: typography.body2, color: colors.textSecondary, textAlign: 'center', marginTop: 8 },
-  
-  // مودال
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { backgroundColor: colors.surface, borderRadius: 24, padding: 32, alignItems: 'center', minWidth: 200, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
   modalText: { fontSize: typography.body1, color: colors.text, marginTop: 16, textAlign: 'center' },
-  
-  // تحميل أولي
+
   initialLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   initialLoadingText: { fontSize: typography.body1, color: colors.textSecondary, marginTop: 16 },
 });

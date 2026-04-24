@@ -1,393 +1,264 @@
-// src/hooks/useLocation.js - النسخة المتقدمة الكاملة
+// src/hooks/useLocation.js - نسخة مستقلة بدون أخطاء
+
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import * as BackgroundFetch from 'expo-background-fetch';
 import DriverService from '../api/driverService';
-import { getSocket, emitEvent, connectSocket } from '../api/socket';
-import { colors } from '../styles/colors';
+import { emitEvent, getSocket } from '../api/socket';
+import { LOCATION_TASK_NAME } from '../tasks/locationTask';
 
-// ✅ اسم مهمة الخلفية
-const LOCATION_TASK_NAME = 'BACKGROUND_LOCATION_TASK';
-const HEARTBEAT_TASK_NAME = 'HEARTBEAT_TASK';
-
-// ✅ تعريف مهمة تحديث الموقع في الخلفية
-TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
-  if (error) {
-    console.error('❌ Background location error:', error);
-    return;
-  }
-  
-  const { locations } = data;
-  if (!locations || locations.length === 0) return;
-  
-  const location = locations[locations.length - 1];
-  const { latitude, longitude, accuracy, heading, speed } = location.coords;
-  
-  console.log(`📍 [Background] Location: ${latitude}, ${longitude}`);
-  
-  try {
-    // إرسال الموقع إلى الخادم
-    await DriverService.updateLocation(latitude, longitude, null);
-    
-    // إرسال عبر Socket إذا كان متصلاً
-    const socket = getSocket();
-    if (socket?.connected) {
-      emitEvent('driver:location:updated', {
-        latitude,
-        longitude,
-        accuracy,
-        heading,
-        speed,
-        background: true,
-        timestamp: new Date().toISOString()
-      });
-    }
-  } catch (err) {
-    console.error('❌ Failed to send background location:', err);
-  }
-});
-
-// ✅ تعريف مهمة نبضات القلب
-TaskManager.defineTask(HEARTBEAT_TASK_NAME, async () => {
-  console.log('💓 [Background] Heartbeat task running');
-  
-  try {
-    const socket = getSocket();
-    const isConnected = socket?.connected;
-    
-    // إرسال نبضة قلب إلى الخادم
-    emitEvent('driver:heartbeat', {
-      timestamp: new Date().toISOString(),
-      isConnected,
-      batteryLevel: await getBatteryLevel()
-    });
-    
-    return BackgroundFetch.BackgroundFetchResult.NewData;
-  } catch (error) {
-    console.error('❌ Heartbeat error:', error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
-  }
-});
-
-// ✅ دالة مساعدة لجلب مستوى البطارية
-const getBatteryLevel = async () => {
-  try {
-    const battery = await require('expo-battery').getBatteryLevelAsync();
-    return battery;
-  } catch {
-    return null;
-  }
-};
-
-class LocationService {
-  constructor() {
-    this.watchId = null;
-    this.isTracking = false;
-    this.lastLocation = null;
-    this.isBackgroundTracking = false;
-    this.heartbeatInterval = null;
-  }
-
-  // ✅ طلب جميع الصلاحيات
-  async requestPermissions() {
-    try {
-      // صلاحيات الموقع في المقدمة
-      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-      if (foregroundStatus !== 'granted') {
-        return { success: false, message: 'صلاحية الموقع في المقدمة مطلوبة' };
-      }
-      
-      // صلاحيات الموقع في الخلفية
-      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-      if (backgroundStatus !== 'granted') {
-        console.warn('⚠️ Background location permission not granted');
-        return { success: false, message: 'صلاحية الموقع في الخلفية مطلوبة' };
-      }
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Permission error:', error);
-      return { success: false, message: error.message };
-    }
-  }
-
-  // ✅ بدء تتبع الموقع في الخلفية
-
-
-async startBackgroundTracking() {
-  if (this.isBackgroundTracking) {
-    console.log('⚠️ Background tracking already started');
-    return true;
-  }
-  
-  try {
-    // استخدام تحديث الموقع في الخلفية بدون خدمة أمامية
-    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 10000,
-      distanceInterval: 30,
-      showsBackgroundLocationIndicator: true,
-      activityType: Location.ActivityType.OtherNavigation,
-      pausesUpdatesAutomatically: false,
-      deferredUpdatesInterval: 10000,
-      deferredUpdatesDistance: 50,
-      // ✅ لا تستخدم foregroundService
-    });
-    
-    this.isBackgroundTracking = true;
-    console.log('✅ Background location tracking started');
-    return true;
-  } catch (error) {
-    console.error('❌ Start background tracking error:', error);
-    return false;
-  }
-}
-
-
-
-  // ✅ إيقاف تتبع الموقع في الخلفية
-  async stopBackgroundTracking() {
-    if (!this.isBackgroundTracking) return;
-    
-    try {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-      this.isBackgroundTracking = false;
-      console.log('✅ Background location tracking stopped');
-    } catch (error) {
-      console.error('❌ Stop background tracking error:', error);
-    }
-  }
-
-  // ✅ بدء نبضات القلب في الخلفية
-  async startHeartbeat() {
-    if (Platform.OS !== 'android') return;
-    
-    try {
-      const isRegistered = await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK_NAME);
-      if (!isRegistered) {
-        await BackgroundFetch.registerTaskAsync(HEARTBEAT_TASK_NAME, {
-          minimumInterval: 60, // كل دقيقة
-          stopOnTerminate: false,
-          startOnBoot: true,
-        });
-        console.log('✅ Heartbeat task registered');
-      }
-    } catch (error) {
-      console.error('❌ Heartbeat registration error:', error);
-    }
-  }
-
-  // ✅ الحصول على الموقع الحالي
-  async getCurrentLocation() {
-    try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      
-      return {
-        success: true,
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy,
-        heading: location.coords.heading,
-        speed: location.coords.speed,
-        timestamp: location.timestamp,
-      };
-    } catch (error) {
-      console.error('❌ Get current location error:', error);
-      return { success: false, message: error.message };
-    }
-  }
-
-  // ✅ تحديث الموقع إلى الخادم
-  async updateLocationToServer(latitude = null, longitude = null, orderId = null) {
-    try {
-      let lat = latitude;
-      let lng = longitude;
-      
-      if (!lat || !lng) {
-        const location = await this.getCurrentLocation();
-        if (!location.success) return { success: false };
-        lat = location.latitude;
-        lng = location.longitude;
-      }
-      
-      this.lastLocation = { latitude: lat, longitude: lng, timestamp: new Date() };
-      
-      // إرسال عبر HTTP
-      const result = await DriverService.updateLocation(lat, lng, orderId);
-      
-      // إرسال عبر Socket
-      const socket = getSocket();
-      if (socket?.connected) {
-        emitEvent('driver:location:updated', {
-          latitude: lat,
-          longitude: lng,
-          orderId,
-          timestamp: new Date().toISOString(),
-        });
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('❌ Update location error:', error);
-      return { success: false };
-    }
-  }
-
-  // ✅ بدء التتبع الكامل (مقدمة + خلفية)
-  async startFullTracking(onLocationUpdate = null) {
-    if (this.isTracking) {
-      console.log('⚠️ Full tracking already started');
-      return;
-    }
-    
-    // طلب الصلاحيات
-    const permissions = await this.requestPermissions();
-    if (!permissions.success) {
-      console.error('❌ Permission denied:', permissions.message);
-      return;
-    }
-    
-    // بدء تتبع الخلفية
-    await this.startBackgroundTracking();
-    
-    // بدء نبضات القلب
-    await this.startHeartbeat();
-    
-    // تحديث فوري
-    const initialLocation = await this.updateLocationToServer();
-    if (onLocationUpdate && initialLocation.success) {
-      onLocationUpdate(initialLocation);
-    }
-    
-    // بدء التتبع في المقدمة
-    this.watchId = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 10000,
-        distanceInterval: 30,
-      },
-      async (location) => {
-        const result = await this.updateLocationToServer(
-          location.coords.latitude,
-          location.coords.longitude
-        );
-        if (onLocationUpdate && result.success) {
-          onLocationUpdate(result);
-        }
-      }
-    );
-    
-    this.isTracking = true;
-    console.log('✅ Full tracking started (foreground + background)');
-  }
-
-  // ✅ إيقاف التتبع الكامل
-  async stopFullTracking() {
-    if (this.watchId) {
-      this.watchId.remove();
-      this.watchId = null;
-    }
-    
-    await this.stopBackgroundTracking();
-    
-    this.isTracking = false;
-    console.log('✅ Full tracking stopped');
-  }
-
-  // ✅ التحقق من حالة التتبع
-  isTrackingActive() {
-    return this.isTracking;
-  }
-
-  // ✅ الحصول على آخر موقع معروف
-  getLastLocation() {
-    return this.lastLocation;
-  }
-}
-
-export default new LocationService();
-
-// ✅ Hook مخصص للاستخدام في المكونات
-export const useLocation = (isOnline = true, updateInterval = 15000) => {
+const useLocation = (isOnline = true, updateInterval = 10000) => {
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isTracking, setIsTracking] = useState(false);
   const [error, setError] = useState(null);
-  const trackingRef = useRef(false);
+  const [isInBackground, setIsInBackground] = useState(false);
+  const watchPositionRef = useRef(null);
+  const mountedRef = useRef(true);
+  const backgroundTaskStarted = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
 
-  const updateLocation = useCallback(async () => {
-    if (!isOnline) return null;
-    
-    const result = await LocationService.updateLocationToServer();
-    if (result.success && result.data?.data?.location) {
-      setCurrentLocation({
-        latitude: result.data.data.location.latitude,
-        longitude: result.data.data.location.longitude,
-        timestamp: new Date(),
-      });
+  // طلب الصلاحيات
+  const requestPermissions = useCallback(async () => {
+    try {
+      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+      if (foregroundStatus !== 'granted') {
+        setError('صلاحية الموقع مطلوبة للتطبيق');
+        return false;
+      }
+      
+      if (Platform.OS === 'android') {
+        const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+        if (backgroundStatus !== 'granted') {
+          console.log('Background location permission not granted - will use foreground only');
+        }
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('Permission error:', err);
+      setError(err.message);
+      return false;
     }
-    return result;
-  }, [isOnline]);
+  }, []);
 
-  const startTracking = useCallback(async () => {
-    if (trackingRef.current) return;
+  // بدء التتبع المباشر (في المقدمة)
+  const startForegroundTracking = useCallback(async () => {
+    if (!isOnline || !mountedRef.current) return;
+    if (watchPositionRef.current) return;
     
-    trackingRef.current = true;
-    setIsTracking(true);
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
     
-    await LocationService.startFullTracking((location) => {
-      setCurrentLocation({
-        latitude: location.data?.data?.location?.latitude,
-        longitude: location.data?.data?.location?.longitude,
-        timestamp: new Date(),
+    try {
+      watchPositionRef.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: updateInterval,
+          distanceInterval: 5,
+        },
+        async (location) => {
+          if (!mountedRef.current) return;
+          
+          const { latitude, longitude, speed, heading } = location.coords;
+          
+          console.log(`📍 Foreground location: ${latitude}, ${longitude}`);
+          
+          setCurrentLocation({
+            latitude,
+            longitude,
+            speed,
+            heading,
+            timestamp: new Date()
+          });
+          
+          const result = await DriverService.updateLocation(latitude, longitude);
+          
+          const socket = getSocket();
+          if (socket?.connected && result.success) {
+            emitEvent('driver:location:updated', {
+              latitude,
+              longitude,
+              speed,
+              heading,
+              timestamp: new Date().toISOString(),
+              source: 'foreground'
+            });
+          }
+        }
+      );
+      
+      console.log('✅ Foreground tracking started (every 10 seconds)');
+    } catch (err) {
+      console.error('Watch position error:', err);
+      setError(err.message);
+    }
+  }, [isOnline, requestPermissions, updateInterval]);
+
+  // إيقاف التتبع المباشر
+  const stopForegroundTracking = useCallback(() => {
+    if (watchPositionRef.current) {
+      watchPositionRef.current.remove();
+      watchPositionRef.current = null;
+      console.log('🛑 Foreground tracking stopped');
+    }
+  }, []);
+
+  // بدء تتبع الخلفية
+  const startBackgroundTracking = useCallback(async () => {
+    if (!isOnline || !mountedRef.current) return;
+    if (backgroundTaskStarted.current) return;
+    if (Platform.OS !== 'android') return;
+    
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+    
+    try {
+      // التحقق من أن المهمة مسجلة
+      if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
+        console.error('Background task not defined');
+        return;
+      }
+      
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.High,
+        timeInterval: updateInterval,
+        distanceInterval: 10,
+        showsBackgroundLocationIndicator: true,
+        deferredUpdatesInterval: updateInterval,
+        deferredUpdatesDistance: 10,
       });
-    });
+      
+      backgroundTaskStarted.current = true;
+      console.log('✅ Background tracking started');
+    } catch (err) {
+      console.error('Start background tracking error:', err?.message);
+      // لا نعرض الخطأ للمستخدم لأن هذا ليس حرجاً
+    }
+  }, [isOnline, requestPermissions, updateInterval]);
+
+  // إيقاف تتبع الخلفية
+  const stopBackgroundTracking = useCallback(async () => {
+    if (!backgroundTaskStarted.current) return;
     
-    console.log('📍 Full tracking started via hook');
+    try {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      backgroundTaskStarted.current = false;
+      console.log('🛑 Background tracking stopped');
+    } catch (err) {
+      // تجاهل الخطأ - المهمة قد لا تكون موجودة
+      console.log('Stop background tracking ignored:', err?.message);
+    }
   }, []);
 
-  const stopTracking = useCallback(async () => {
-    await LocationService.stopFullTracking();
-    trackingRef.current = false;
-    setIsTracking(false);
-    console.log('📍 Full tracking stopped via hook');
-  }, []);
+  // تحديث موقع فوري
+  const updateLocationOnce = useCallback(async () => {
+    if (!isOnline || !mountedRef.current) return null;
+    
+    try {
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) return null;
+      
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+      
+      const { latitude, longitude, speed, heading } = location.coords;
+      
+      setCurrentLocation({
+        latitude,
+        longitude,
+        speed,
+        heading,
+        timestamp: new Date()
+      });
+      
+      const result = await DriverService.updateLocation(latitude, longitude);
+      
+      if (result?.success && error) {
+        setError(null);
+      }
+      
+      return result;
+    } catch (err) {
+      console.log('Update location once error:', err?.message);
+      return null;
+    }
+  }, [isOnline, requestPermissions, error]);
 
-  // التعامل مع تغييرات حالة التطبيق
+  // مراقبة حالة التطبيق
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState === 'active' && isOnline && !trackingRef.current) {
-        console.log('📱 App resumed, restarting tracking...');
-        await startTracking();
+      const wasBackground = appStateRef.current === 'background';
+      appStateRef.current = nextAppState;
+      const isNowBackground = nextAppState === 'background';
+      
+      setIsInBackground(isNowBackground);
+      
+      if (isNowBackground && !wasBackground) {
+        // انتقل إلى الخلفية
+        console.log('📱 App moved to background');
+        stopForegroundTracking();
+        await startBackgroundTracking();
+      } 
+      else if (!isNowBackground && wasBackground) {
+        // عاد إلى المقدمة
+        console.log('📱 App returned to foreground');
+        await stopBackgroundTracking();
+        startForegroundTracking();
+        await updateLocationOnce();
       }
     });
     
     return () => subscription.remove();
-  }, [isOnline, startTracking]);
+  }, [startForegroundTracking, stopForegroundTracking, startBackgroundTracking, stopBackgroundTracking, updateLocationOnce]);
 
   // بدء/إيقاف التتبع بناءً على حالة الاتصال
   useEffect(() => {
-    if (isOnline) {
-      startTracking();
-    } else {
-      stopTracking();
-    }
+    const initTracking = async () => {
+      if (isOnline) {
+        if (!isInBackground) {
+          await startForegroundTracking();
+        } else {
+          await startBackgroundTracking();
+        }
+        setIsTracking(true);
+      } else {
+        await stopForegroundTracking();
+        await stopBackgroundTracking();
+        setIsTracking(false);
+      }
+    };
+    
+    initTracking();
     
     return () => {
-      stopTracking();
+      stopForegroundTracking();
+      stopBackgroundTracking();
     };
-  }, [isOnline, startTracking, stopTracking]);
+  }, [isOnline, isInBackground, startForegroundTracking, stopForegroundTracking, startBackgroundTracking, stopBackgroundTracking]);
+
+  // تنظيف عند إلغاء تحميل المكون
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      stopForegroundTracking();
+      stopBackgroundTracking();
+    };
+  }, [stopForegroundTracking, stopBackgroundTracking]);
 
   return {
     currentLocation,
     isTracking,
     error,
-    startTracking,
-    stopTracking,
-    updateLocation,
-    updateLocationToServer: updateLocation,
+    isInBackground,
+    startForegroundTracking,
+    stopForegroundTracking,
+    startBackgroundTracking,
+    stopBackgroundTracking,
+    updateLocation: updateLocationOnce,
   };
 };
+
+export default useLocation;

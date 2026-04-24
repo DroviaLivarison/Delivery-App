@@ -1,4 +1,4 @@
-// src/store/authStore.js - النسخة المصححة بالكامل
+// src/store/authStore.js - النسخة النهائية المصححة
 
 import { create } from 'zustand';
 import DriverService from '../api/driverService';
@@ -43,8 +43,6 @@ const useAuthStore = create((set, get) => ({
 
         await connectSocket();
 
-        const isAccountActive = profile?.isActive === true;
-
         set({
           user: profile,
           isAuthenticated: true,
@@ -59,7 +57,6 @@ const useAuthStore = create((set, get) => ({
         return false;
       }
     } catch (error) {
-      console.error('Login error:', error);
       set({ error: error.message || 'فشل تسجيل الدخول', isLoading: false });
       return false;
     }
@@ -95,17 +92,6 @@ const useAuthStore = create((set, get) => ({
         const detailedStatus = await DriverService.getDetailedStatus();
         
         await connectSocket();
-
-        const isAccountActive = profile.isActive === true;
-        
-        console.log('📊 Profile loaded:', {
-          name: profile.name,
-          id: profile.id,
-          isActive: isAccountActive,
-          isVerified: profile.isVerified,
-          isAvailable: profile.isAvailable,
-          isOnline: detailedStatus?.isOnline
-        });
         
         set({
           user: profile,
@@ -121,94 +107,58 @@ const useAuthStore = create((set, get) => ({
         return false;
       }
     } catch (error) {
-      console.error('Load user error:', error);
       await get().logout();
       set({ isAuthenticated: false, isLoading: false });
       return false;
     }
   },
 
-
-  // ✅ تبديل حالة الاتصال (isOnline) - تستخدم endpoint /driver/online
-toggleOnlineStatus: async () => {
-  const currentState = get();
-  const isAccountActive = currentState.user?.isActive === true;
-  
-  if (!isAccountActive) {
-    console.log('⚠️ Cannot toggle online - account is inactive');
-    return false;
-  }
-  
-  const newStatus = !currentState.isOnline;
-  console.log('🔄 Toggling online status to:', newStatus);
-
-  // ✅ استخدام endpoint online الجديد
-  const result = await DriverService.toggleOnline(newStatus);
-
-  if (result && result.success) {
-    set({ isOnline: newStatus });
-    if (currentState.user) {
-      set({ 
-        user: { 
-          ...currentState.user, 
-          isOnline: newStatus 
-        } 
-      });
+  // تبديل حالة الاتصال (isOnline)
+  toggleOnlineStatus: async () => {
+    const currentState = get();
+    const isAccountActive = currentState.user?.isActive === true;
+    
+    if (!isAccountActive) {
+      return false;
     }
-    return true;
-  }
-  return false;
-},
+    
+    const newStatus = !currentState.isOnline;
+    const result = await DriverService.toggleOnline(newStatus);
 
-// ✅ إضافة دالة تبديل التوفر (isAvailable)
-toggleAvailability: async () => {
-  const currentState = get();
-  const isAccountActive = currentState.user?.isActive === true;
-  
-  if (!isAccountActive) {
-    console.log('⚠️ Cannot toggle availability - account is inactive');
+    if (result && result.success) {
+      set({ isOnline: newStatus });
+      if (currentState.user) {
+        set({ 
+          user: { 
+            ...currentState.user, 
+            isOnline: newStatus 
+          } 
+        });
+      }
+      return true;
+    }
     return false;
-  }
-  
-  // يجب أن يكون متصلاً أولاً
-  if (!currentState.isOnline) {
-    console.log('⚠️ Cannot toggle availability - driver is offline');
-    return false;
-  }
-  
-  const newStatus = !currentState.user?.isAvailable;
-  console.log('🔄 Toggling availability to:', newStatus);
-  
-  const result = await DriverService.toggleAvailability(newStatus);
-  
-  if (result && result.success) {
-    set({ 
-      user: { ...currentState.user, isAvailable: newStatus }
-    });
-    return true;
-  }
-  return false;
-},
+  },
 
-
-  // ✅ جديد: تبديل حالة التوفر فقط (isAvailable)
+  // تبديل حالة التوفر (isAvailable)
   toggleAvailability: async () => {
     const currentState = get();
     const isAccountActive = currentState.user?.isActive === true;
     
     if (!isAccountActive) {
-      console.log('⚠️ Cannot toggle availability - account is inactive');
       return false;
     }
     
-    const newAvailability = !currentState.user?.isAvailable;
-    console.log('🔄 Toggling availability to:', newAvailability);
+    if (!currentState.isOnline) {
+      return false;
+    }
     
-    const result = await DriverService.toggleAvailability(newAvailability);
+    const newStatus = !currentState.user?.isAvailable;
+    const result = await DriverService.toggleAvailability(newStatus);
     
     if (result && result.success) {
       set({ 
-        user: { ...currentState.user, isAvailable: newAvailability }
+        user: { ...currentState.user, isAvailable: newStatus }
       });
       return true;
     }
@@ -248,7 +198,6 @@ toggleAvailability: async () => {
   setOnlineStatus: (status) => {
     const isAccountActive = get().user?.isActive === true;
     if (!isAccountActive && status) {
-      console.log('⚠️ Cannot set online - account is inactive');
       return;
     }
     set({ isOnline: status });

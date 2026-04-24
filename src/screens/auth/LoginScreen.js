@@ -14,6 +14,7 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import LoadingOverlay from '../../components/common/LoadingOverlay';
 import useAuthStore from '../../store/authStore';
+import DriverService from '../../api/driverService'; // ✅ إضافة هذا السطر
 import { colors } from '../../styles/colors';
 import { typography } from '../../styles/typography';
 import { globalStyles } from '../../styles/globalStyles';
@@ -49,10 +50,12 @@ export default function LoginScreen() {
     const success = await login(phone, password);
     if (!success) {
       Alert.alert('خطأ', 'فشل تسجيل الدخول. تحقق من رقم الهاتف وكلمة المرور');
+      return;
     }
 
+    // ✅ إضافة التحقق من وجود profile قبل استخدامه
     const profile = await DriverService.getProfile();
-    if (profile && !profile.isAvailable) {
+    if (profile && profile.isAvailable === false) {
       await DriverService.toggleAvailability(true);
     }
   };

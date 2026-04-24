@@ -1,7 +1,9 @@
-// src/api/socket.js - يستورد الإعدادات من client.js
+// src/api/socket.js - الملف الكامل المعدل
+
 import { io } from 'socket.io-client';
 import { getSecureItem } from '../utils/storage';
-import { CONFIG } from './client';  // ✅ استيراد الإعدادات من client.js
+import { CONFIG } from './client';
+import * as Notifications from 'expo-notifications';
 
 const SOCKET_URL = CONFIG.SOCKET_URL;
 
@@ -9,8 +11,8 @@ console.log(`🔌 Using Socket: ${SOCKET_URL}`);
 
 let socket = null;
 let listeners = new Map();
+let continuousInterval = null;
 
-// الاتصال بخادم WebSocket
 export const connectSocket = async () => {
   const token = await getSecureItem('accessToken');
   if (!token) {
@@ -43,14 +45,9 @@ export const connectSocket = async () => {
     console.log('Socket disconnected:', reason);
   });
 
-
-
-  // أضف هذه الأحداث في دالة connectSocket
-
   socket.on('notification:new', (data) => {
     console.log('🔔 New notification via socket:', data);
 
-    // عرض إشعار محلي
     Notifications.scheduleNotificationAsync({
       content: {
         title: data.title,
@@ -60,7 +57,7 @@ export const connectSocket = async () => {
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },
       trigger: null,
-    });
+    }).catch(err => console.log('Notification error:', err));
   });
 
   socket.on('driver:new-order', (data) => {
@@ -75,26 +72,29 @@ export const connectSocket = async () => {
         priority: Notifications.AndroidNotificationPriority.MAX,
       },
       trigger: null,
-    });
+    }).catch(err => console.log('Notification error:', err));
   });
 
   socket.on('order:status:changed', (data) => {
     Notifications.scheduleNotificationAsync({
       content: {
         title: 'تحديث الطلب',
-        body: `تم تحديث حالة الطلب #${data.orderId.slice(-6)} إلى ${data.status}`,
+        body: `تم تحديث حالة الطلب #${data.orderId?.slice(-6) || '000000'} إلى ${data.status}`,
         data: { type: 'order_update', orderId: data.orderId },
         sound: true,
       },
       trigger: null,
-    });
+    }).catch(err => console.log('Notification error:', err));
   });
 
   return socket;
 };
 
-// قطع الاتصال
 export const disconnectSocket = () => {
+  if (continuousInterval) {
+    clearInterval(continuousInterval);
+    continuousInterval = null;
+  }
   if (socket) {
     socket.disconnect();
     socket = null;
@@ -102,10 +102,8 @@ export const disconnectSocket = () => {
   }
 };
 
-// الحصول على كائن socket
 export const getSocket = () => socket;
 
-// الاستماع للأحداث
 export const onEvent = (eventName, callback) => {
   if (socket) {
     socket.on(eventName, callback);
@@ -116,7 +114,6 @@ export const onEvent = (eventName, callback) => {
   }
 };
 
-// إزالة الاستماع
 export const offEvent = (eventName, callback) => {
   if (socket) {
     socket.off(eventName, callback);
@@ -131,7 +128,6 @@ export const offEvent = (eventName, callback) => {
   }
 };
 
-// إرسال حدث
 export const emitEvent = (eventName, data) => {
   if (socket && socket.connected) {
     socket.emit(eventName, data);
@@ -140,29 +136,47 @@ export const emitEvent = (eventName, data) => {
   return false;
 };
 
-// ========== أحداث المندوب ==========
+export const onDriverLocationUpdate = (callback) => {
+  onEvent('driver:location:updated', callback);
+};
 
-// استماع لحدث طلب جديد
+export const requestDriverLocation = (driverId) => {
+  emitEvent('admin:request:driver:location', { driverId });
+};
+
+export const startContinuousLocationUpdates = (callback, interval = 10000) => {
+  if (continuousInterval) clearInterval(continuousInterval);
+  
+  continuousInterval = setInterval(async () => {
+    if (socket && socket.connected && callback) {
+      callback();
+    }
+  }, interval);
+};
+
+export const stopContinuousLocationUpdates = () => {
+  if (continuousInterval) {
+    clearInterval(continuousInterval);
+    continuousInterval = null;
+  }
+};
+
 export const onNewOrder = (callback) => {
   onEvent('driver:new-order', callback);
 };
 
-// استماع لحدث تحديث الطلب
 export const onOrderUpdated = (callback) => {
   onEvent('order:status:updated', callback);
 };
 
-// استماع لحدث إلغاء الطلب
 export const onOrderCancelled = (callback) => {
   onEvent('driver:order-cancelled', callback);
 };
 
-// استماع لحدث طلب موقع
 export const onDriverLocationRequest = (callback) => {
   onEvent('driver:location:request', callback);
 };
 
-// إرسال تحديث الموقع
 export const emitLocationUpdate = (latitude, longitude, orderId = null) => {
   emitEvent('driver:location:updated', { latitude, longitude, orderId });
 };

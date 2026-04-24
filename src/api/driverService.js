@@ -1,4 +1,4 @@
-// src/api/driverService.js - النسخة النهائية المعدلة بالكامل
+// src/api/driverService.js - الملف الكامل المعدل
 
 import apiClient from './client';
 import { getSecureItem, saveSecureItem, deleteSecureItem } from '../utils/storage';
@@ -61,7 +61,6 @@ class DriverService {
     }
   }
 
-  // ✅ تعديل: تبديل حالة التوفر فقط (isAvailable)
   async toggleAvailability(isAvailable) {
     try {
       console.log('📤 Toggling availability:', { isAvailable });
@@ -86,10 +85,6 @@ class DriverService {
     }
   }
 
-  /**
-   * ✅ تبديل حالة الاتصال فقط (isOnline)
-   * يستخدم endpoint /driver/online
-   */
   async toggleOnline(isOnline) {
     try {
       console.log('📤 Toggling online status:', { isOnline });
@@ -114,8 +109,6 @@ class DriverService {
     }
   }
 
-
-  // ✅ جديد: جلب الحالة التفصيلية للمندوب
   async getDetailedStatus() {
     try {
       const response = await apiClient.get(`${this.baseUrl}/status`);
@@ -133,14 +126,27 @@ class DriverService {
 
   async updateLocation(latitude, longitude, orderId = null) {
     try {
+      if (!latitude || !longitude) {
+        console.warn('Invalid coordinates:', { latitude, longitude });
+        return { success: false, message: 'إحداثيات غير صالحة' };
+      }
+      
+      const updateTime = new Date().toISOString();
+      
       const response = await apiClient.put(`${this.baseUrl}/location`, {
-        latitude,
-        longitude,
-        orderId
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        orderId: orderId || null,
+        timestamp: updateTime
       });
-      return { success: true, data: response.data };
+      
+      console.log(`📍 Location updated at ${updateTime}: ${latitude}, ${longitude}`);
+      
+      return { success: true, data: response.data, timestamp: updateTime };
     } catch (error) {
-      console.error('Update location error:', error);
+      if (error.response?.status !== 400) {
+        console.error('Update location error:', error.response?.status, error.response?.data);
+      }
       return {
         success: false,
         message: error.response?.data?.message || 'فشل تحديث الموقع'
@@ -191,7 +197,6 @@ class DriverService {
         orders = response.data.data.orders || [];
         stats = response.data.data.stats || {};
 
-        // ✅ قراءة حالة المندوب من API
         if (response.data.data.driverStatus) {
           isAvailable = response.data.data.driverStatus.isAvailable || false;
           isOnline = response.data.data.driverStatus.isOnline || false;
@@ -434,8 +439,6 @@ class DriverService {
     }
   }
 
-  // ========== دوال مساعدة ==========
-
   normalizeOrder(order) {
     if (!order) return null;
 
@@ -457,15 +460,12 @@ class DriverService {
     return (orders || []).map(order => this.normalizeOrder(order));
   }
 
-  // ✅ دالة مساعدة لنص الحالة
   getDriverStatusText(driver) {
     if (driver.hasActiveOrder) return 'مشغول (في توصيلة)';
     if (driver.isOnline && driver.isAvailable) return 'متاح ✅';
     if (driver.isOnline && !driver.isAvailable) return 'غير متاح ⛔';
     return 'غير متصل 📴';
   }
-
-
 
   normalizeUser(user) {
     if (!user) return null;
@@ -501,13 +501,11 @@ class DriverService {
       isVerified: isVerifiedValue,
       isOnline: isOnlineValue,
       isAvailable: isAvailableValue,
-
       statusText: this.getDriverStatusText({
         isOnline: isOnlineValue,
         isAvailable: isAvailableValue,
         hasActiveOrder: false
       }),
-
       totalDeliveries: user.driverInfo?.totalDeliveries || 0,
       earnings: user.driverInfo?.earnings || 0,
       rating: user.driverInfo?.rating || 0,
@@ -518,9 +516,6 @@ class DriverService {
       role: user.role || 'driver'
     };
   }
-
-
-
 
   getStatusText(status) {
     const statusMap = {

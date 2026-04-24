@@ -34,5 +34,5 @@ export const ORDER_STATUS_COLORS = {
 };
 
 // إعدادات إضافية
-export const MAPBOX_ACCESS_TOKEN = 'your_token_here';
+export const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoid2FsaWQyNSIsImEiOiJjbW4xY3Fma3kwdmxiMnJyMHNqbzNuczBvIn0.6T6xCsIWM3wuaL_QZpwjWA';
 export const MAPBOX_STYLE_URL = 'mapbox://styles/mapbox/streets-v12';

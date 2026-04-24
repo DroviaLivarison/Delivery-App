@@ -1,3 +1,5 @@
+// src/screens/main/ActiveOrderScreen.js - الملف الكامل
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import Header from '../../components/common/Header';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
@@ -30,11 +33,10 @@ export default function ActiveOrderScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [currentStatus, setCurrentStatus] = useState(ORDER_STATUS.PENDING);
-  const { updateLocationToServer, currentLocation } = useLocation(true, 10000);
+  const { updateLocation, currentLocation, isTracking } = useLocation(true, 10000);
 
   const orderId = order?.id || order?._id || route?.params?.orderId;
 
-  // جلب بيانات الطلب إذا تم تمرير orderId فقط
   useEffect(() => {
     const fetchOrderIfNeeded = async () => {
       const passedOrder = route?.params?.order;
@@ -79,7 +81,6 @@ export default function ActiveOrderScreen() {
   ];
   const currentStepIndex = statusSteps.indexOf(currentStatus);
 
-  // ✅ الدالة المعدلة بالكامل لتحديث الحالة
   const updateStatus = async (newStatus) => {
     if (!orderId) {
       Alert.alert('خطأ', 'معرف الطلب غير موجود');
@@ -87,23 +88,34 @@ export default function ActiveOrderScreen() {
     }
 
     if (newStatus === currentStatus) {
-      console.log('⚠️ Skipping status update - same status:', newStatus);
       Alert.alert('تنبيه', 'الطلب بالفعل في هذه الحالة');
       return;
     }
 
     setLoading(true);
 
-    // ✅ الحصول على الموقع الحالي إذا كان متاحاً
     let locationData = null;
     try {
-      const locationResult = await updateLocationToServer();
+      const locationResult = await updateLocation();
       if (locationResult?.success && currentLocation) {
         locationData = {
           latitude: currentLocation.latitude,
           longitude: currentLocation.longitude
         };
         console.log('📍 Current location for status update:', locationData);
+      } else {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const directLocation = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High
+          });
+          if (directLocation) {
+            locationData = {
+              latitude: directLocation.coords.latitude,
+              longitude: directLocation.coords.longitude
+            };
+          }
+        }
       }
     } catch (error) {
       console.log('Location update error (non-critical):', error);
@@ -112,7 +124,6 @@ export default function ActiveOrderScreen() {
     let result;
 
     try {
-      // ✅ إرسال طلب تحديث الحالة مع الموقع إذا كان متاحاً
       if (newStatus === ORDER_STATUS.READY) {
         result = await DriverService.updateOrderStatus(orderId, 'ready', locationData);
       } else if (newStatus === ORDER_STATUS.PICKED) {
@@ -170,10 +181,9 @@ export default function ActiveOrderScreen() {
 
     setLoading(true);
 
-    // ✅ الحصول على الموقع الحالي
     let locationData = null;
     try {
-      const locationResult = await updateLocationToServer();
+      const locationResult = await updateLocation();
       if (locationResult?.success && currentLocation) {
         locationData = {
           latitude: currentLocation.latitude,
@@ -181,7 +191,7 @@ export default function ActiveOrderScreen() {
         };
       }
     } catch (error) {
-      console.log('Location update error (non-critical):', error);
+      console.log('Location update error:', error);
     }
 
     const result = await DriverService.updateOrderStatus(orderId, 'picked', locationData);
@@ -233,26 +243,26 @@ export default function ActiveOrderScreen() {
     );
   };
 
-const getNextAction = () => {
-  switch (currentStatus) {
-    case ORDER_STATUS.PENDING:
-      return { title: '✅ قبول الطلب', action: () => updateStatus(ORDER_STATUS.ACCEPTED) };
-    case ORDER_STATUS.ACCEPTED:
-      // ✅ في حالة ACCEPTED، المندوب ينتظر المتجر ليغير الحالة إلى READY
-      return { 
-        title: '⏳ جاري تجهيز الطلب', 
-        action: null, 
-        disabled: true,
-        note: 'الطلب قيد التحضير من قبل المتجر'
-      };
-    case ORDER_STATUS.READY:
-      return { title: '🚚 بدء التوصيل', action: handleStartDelivery };
-    case ORDER_STATUS.PICKED:
-      return { title: '📦 تم التوصيل', action: () => updateStatus(ORDER_STATUS.DELIVERED) };
-    default:
-      return null;
-  }
-};
+  const getNextAction = () => {
+    switch (currentStatus) {
+      case ORDER_STATUS.PENDING:
+        return { title: '✅ قبول الطلب', action: () => updateStatus(ORDER_STATUS.ACCEPTED) };
+      case ORDER_STATUS.ACCEPTED:
+        return { 
+          title: '⏳ جاري تجهيز الطلب', 
+          action: null, 
+          disabled: true,
+          note: 'الطلب قيد التحضير من قبل المتجر'
+        };
+      case ORDER_STATUS.READY:
+        return { title: '🚚 بدء التوصيل', action: handleStartDelivery };
+      case ORDER_STATUS.PICKED:
+        return { title: '📦 تم التوصيل', action: () => updateStatus(ORDER_STATUS.DELIVERED) };
+      default:
+        return null;
+    }
+  };
+
   if (loadingOrder) {
     return (
       <SafeAreaView style={globalStyles.safeArea}>

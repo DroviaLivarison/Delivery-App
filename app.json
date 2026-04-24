@@ -28,11 +28,13 @@
       },
       "package": "com.yourcompany.driverapp",
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "WAKE_LOCK",
-        "RECEIVE_BOOT_COMPLETED"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ]
     },
     "web": {
@@ -42,23 +44,32 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك حتى في الخلفية لتوصيل الطلبات"
+          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك لتوصيل الطلبات",
+          "locationAlwaysPermission": "نحتاج موقعك في الخلفية لتحديث حالة التوصيل",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "androidForegroundService": {
+            "notificationTitle": "توصيل سريع",
+            "notificationBody": "جاري مشاركة موقعك لتوصيل الطلبات",
+            "notificationColor": "#f64008"
+          }
         }
       ],
       [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#ffffff"
+          "color": "#f64008",
+          "sounds": ["./assets/notification.wav"]
         }
       ],
       [
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 36,
-            "targetSdkVersion": 36,
-            "buildToolsVersion": "36.0.0",
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0",
             "minSdkVersion": 24
           },
           "ios": {
