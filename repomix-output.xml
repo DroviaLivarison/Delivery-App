@@ -51,8 +51,10 @@ assets/icon.png
 assets/notification-icon.png
 assets/splash-icon.png
 assets/splash.png
+babel.config.js
 eas.json
 index.js
+metro.config.js
 package.json
 src/api/auth.js
 src/api/chat.js
@@ -92,6 +94,7 @@ src/store/authStore.js
 src/styles/colors.js
 src/styles/globalStyles.js
 src/styles/typography.js
+src/tasks/locationTask.js
 src/utils/constants.js
 src/utils/notifications.js
 src/utils/storage.js
@@ -115,35 +118,33 @@ strict-peer-dependencies=false
 auto-install-peers=true
 </file>
 
-<file path="App.js">
-import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Platform } from 'react-native';
-import ErrorBoundary from './src/components/common/ErrorBoundary';
-import AppNavigator from './src/navigation/AppNavigator';
-import { colors } from './src/styles/colors';
-
-export default function App() {
-  return (
-    <ErrorBoundary>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <NavigationContainer>
-            <StatusBar 
-              style={Platform.OS === 'android' ? 'light' : 'dark'} 
-              backgroundColor={colors.primary}
-              translucent={false}
-            />
-            <AppNavigator />
-          </NavigationContainer>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </ErrorBoundary>
-  );
-}
+<file path="babel.config.js">
+// babel.config.js
+module.exports = function(api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: [
+      'react-native-reanimated/plugin',
+      [
+        'module-resolver',
+        {
+          root: ['./src'],
+          alias: {
+            '@api': './src/api',
+            '@components': './src/components',
+            '@hooks': './src/hooks',
+            '@navigation': './src/navigation',
+            '@screens': './src/screens',
+            '@store': './src/store',
+            '@styles': './src/styles',
+            '@utils': './src/utils'
+          }
+        }
+      ]
+    ]
+  };
+};
 </file>
 
 <file path="index.js">
@@ -155,6 +156,26 @@ import App from './App';
 // It also ensures that whether you load the app in Expo Go or in a native build,
 // the environment is set up appropriately
 registerRootComponent(App);
+</file>
+
+<file path="metro.config.js">
+// metro.config.js
+const { getDefaultConfig } = require('expo/metro-config');
+
+const config = getDefaultConfig(__dirname);
+
+config.resolver.assetExts.push(
+  // إضافة دعم للملفات الإضافية
+  'cjs'
+);
+
+config.transformer.minifierConfig = {
+  compress: {
+    drop_console: process.env.NODE_ENV === 'production',
+  },
+};
+
+module.exports = config;
 </file>
 
 <file path="src/api/auth.js">
@@ -2623,608 +2644,6 @@ export default function AppNavigator() {
 }
 </file>
 
-<file path="src/screens/main/ActiveOrderScreen.js">
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute, useNavigation } from '@react-navigation/native';
-import Header from '../../components/common/Header';
-import Button from '../../components/common/Button';
-import Card from '../../components/common/Card';
-import LoadingOverlay from '../../components/common/LoadingOverlay';
-import OrderStatusBadge from '../../components/orders/OrderStatusBadge';
-import DriverService from '../../api/driverService';
-import { emitEvent, getSocket } from '../../api/socket';
-import useLocation from '../../hooks/useLocation';
-import { colors } from '../../styles/colors';
-import { typography } from '../../styles/typography';
-import { globalStyles } from '../../styles/globalStyles';
-import { ORDER_STATUS, ORDER_STATUS_AR } from '../../utils/constants';
-
-export default function ActiveOrderScreen() {
-  const route = useRoute();
-  const navigation = useNavigation();
-
-  const [order, setOrder] = useState(route?.params?.order || null);
-  const [loading, setLoading] = useState(false);
-  const [loadingOrder, setLoadingOrder] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState(ORDER_STATUS.PENDING);
-  const { updateLocationToServer, currentLocation } = useLocation(true, 10000);
-
-  const orderId = order?.id || order?._id || route?.params?.orderId;
-
-  // جلب بيانات الطلب إذا تم تمرير orderId فقط
-  useEffect(() => {
-    const fetchOrderIfNeeded = async () => {
-      const passedOrder = route?.params?.order;
-      const passedOrderId = route?.params?.orderId;
-
-      if (passedOrder) {
-        setOrder(passedOrder);
-        setCurrentStatus(passedOrder.status || ORDER_STATUS.PENDING);
-        return;
-      }
-
-      if (passedOrderId && !passedOrder) {
-        setLoadingOrder(true);
-        try {
-          const fetchedOrder = await DriverService.getOrderDetails(passedOrderId);
-          if (fetchedOrder) {
-            setOrder(fetchedOrder);
-            setCurrentStatus(fetchedOrder.status || ORDER_STATUS.PENDING);
-          } else {
-            Alert.alert('خطأ', 'لم يتم العثور على الطلب');
-            navigation.goBack();
-          }
-        } catch (error) {
-          console.error('Error fetching order:', error);
-          Alert.alert('خطأ', 'حدث خطأ أثناء جلب بيانات الطلب');
-          navigation.goBack();
-        } finally {
-          setLoadingOrder(false);
-        }
-      }
-    };
-
-    fetchOrderIfNeeded();
-  }, [route?.params]);
-
-  const statusSteps = [
-    ORDER_STATUS.PENDING,
-    ORDER_STATUS.ACCEPTED,
-    ORDER_STATUS.READY,
-    ORDER_STATUS.PICKED,
-    ORDER_STATUS.DELIVERED,
-  ];
-  const currentStepIndex = statusSteps.indexOf(currentStatus);
-
-  // ✅ الدالة المعدلة بالكامل لتحديث الحالة
-  const updateStatus = async (newStatus) => {
-    if (!orderId) {
-      Alert.alert('خطأ', 'معرف الطلب غير موجود');
-      return;
-    }
-
-    if (newStatus === currentStatus) {
-      console.log('⚠️ Skipping status update - same status:', newStatus);
-      Alert.alert('تنبيه', 'الطلب بالفعل في هذه الحالة');
-      return;
-    }
-
-    setLoading(true);
-
-    // ✅ الحصول على الموقع الحالي إذا كان متاحاً
-    let locationData = null;
-    try {
-      const locationResult = await updateLocationToServer();
-      if (locationResult?.success && currentLocation) {
-        locationData = {
-          latitude: currentLocation.latitude,
-          longitude: currentLocation.longitude
-        };
-        console.log('📍 Current location for status update:', locationData);
-      }
-    } catch (error) {
-      console.log('Location update error (non-critical):', error);
-    }
-
-    let result;
-
-    try {
-      // ✅ إرسال طلب تحديث الحالة مع الموقع إذا كان متاحاً
-      if (newStatus === ORDER_STATUS.READY) {
-        result = await DriverService.updateOrderStatus(orderId, 'ready', locationData);
-      } else if (newStatus === ORDER_STATUS.PICKED) {
-        result = await DriverService.updateOrderStatus(orderId, 'picked', locationData);
-      } else if (newStatus === ORDER_STATUS.DELIVERED) {
-        result = await DriverService.updateOrderStatus(orderId, 'delivered', locationData);
-      } else {
-        result = await DriverService.updateOrderStatus(orderId, newStatus, locationData);
-      }
-    } catch (error) {
-      console.error('API Error:', error);
-      result = { success: false, message: error.message || 'حدث خطأ في الاتصال' };
-    }
-
-    if (result.success) {
-      setCurrentStatus(newStatus);
-
-      if (order) {
-        setOrder({ ...order, status: newStatus });
-      }
-
-      const socket = getSocket();
-      if (socket && socket.connected) {
-        emitEvent('order:status:updated', {
-          orderId: orderId,
-          status: newStatus,
-          location: locationData,
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      if (newStatus === ORDER_STATUS.DELIVERED) {
-        Alert.alert('نجاح', 'تم تسليم الطلب بنجاح');
-        navigation.goBack();
-      } else {
-        Alert.alert('تم', 'تم تحديث حالة الطلب');
-      }
-    } else {
-      Alert.alert('خطأ', result.message || 'فشل تحديث حالة الطلب');
-    }
-
-    setLoading(false);
-  };
-
-  const handleStartDelivery = async () => {
-    if (!orderId) {
-      Alert.alert('خطأ', 'معرف الطلب غير موجود');
-      return;
-    }
-
-    if (currentStatus !== ORDER_STATUS.READY) {
-      Alert.alert('تنبيه', 'لا يمكن بدء التوصيل إلا بعد أن يصبح الطلب جاهزاً');
-      return;
-    }
-
-    setLoading(true);
-
-    // ✅ الحصول على الموقع الحالي
-    let locationData = null;
-    try {
-      const locationResult = await updateLocationToServer();
-      if (locationResult?.success && currentLocation) {
-        locationData = {
-          latitude: currentLocation.latitude,
-          longitude: currentLocation.longitude
-        };
-      }
-    } catch (error) {
-      console.log('Location update error (non-critical):', error);
-    }
-
-    const result = await DriverService.updateOrderStatus(orderId, 'picked', locationData);
-    setLoading(false);
-
-    if (result.success) {
-      setCurrentStatus(ORDER_STATUS.PICKED);
-      if (order) {
-        setOrder({ ...order, status: ORDER_STATUS.PICKED });
-      }
-      Alert.alert('نجاح', 'تم بدء التوصيل');
-    } else {
-      Alert.alert('خطأ', result.message);
-    }
-  };
-
-  const handleCancelOrder = () => {
-    if (!orderId) {
-      Alert.alert('خطأ', 'معرف الطلب غير موجود');
-      return;
-    }
-
-    if (currentStatus === ORDER_STATUS.DELIVERED) {
-      Alert.alert('تنبيه', 'لا يمكن إلغاء طلب تم تسليمه');
-      return;
-    }
-
-    Alert.alert(
-      'إلغاء الطلب',
-      'هل أنت متأكد من إلغاء هذا الطلب؟',
-      [
-        { text: 'لا', style: 'cancel' },
-        {
-          text: 'نعم، إلغاء',
-          onPress: async () => {
-            setLoading(true);
-            const result = await DriverService.updateOrderStatus(orderId, ORDER_STATUS.CANCELLED);
-            setLoading(false);
-            if (result.success) {
-              Alert.alert('تم', 'تم إلغاء الطلب');
-              navigation.goBack();
-            } else {
-              Alert.alert('خطأ', result.message);
-            }
-          },
-          style: 'destructive'
-        }
-      ]
-    );
-  };
-
-const getNextAction = () => {
-  switch (currentStatus) {
-    case ORDER_STATUS.PENDING:
-      return { title: '✅ قبول الطلب', action: () => updateStatus(ORDER_STATUS.ACCEPTED) };
-    case ORDER_STATUS.ACCEPTED:
-      // ✅ في حالة ACCEPTED، المندوب ينتظر المتجر ليغير الحالة إلى READY
-      return { 
-        title: '⏳ جاري تجهيز الطلب', 
-        action: null, 
-        disabled: true,
-        note: 'الطلب قيد التحضير من قبل المتجر'
-      };
-    case ORDER_STATUS.READY:
-      return { title: '🚚 بدء التوصيل', action: handleStartDelivery };
-    case ORDER_STATUS.PICKED:
-      return { title: '📦 تم التوصيل', action: () => updateStatus(ORDER_STATUS.DELIVERED) };
-    default:
-      return null;
-  }
-};
-  if (loadingOrder) {
-    return (
-      <SafeAreaView style={globalStyles.safeArea}>
-        <Header title="الطلب الحالي" showBack />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>جاري تحميل بيانات الطلب...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!order) {
-    return (
-      <SafeAreaView style={globalStyles.safeArea}>
-        <Header title="الطلب الحالي" showBack />
-        <View style={globalStyles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>🚚</Text>
-          <Text style={globalStyles.emptyText}>لا يوجد طلب نشط حالياً</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const nextAction = getNextAction();
-  const isCompleted = currentStatus === ORDER_STATUS.DELIVERED;
-  const isCancelled = currentStatus === ORDER_STATUS.CANCELLED;
-  const displayOrderId = orderId?.slice(-8) || '00000000';
-
-  return (
-    <SafeAreaView style={globalStyles.safeArea}>
-      <LoadingOverlay visible={loading} message="جاري التحديث..." />
-      <Header title="الطلب الحالي" showBack />
-
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <Card style={styles.card}>
-          <View style={styles.header}>
-            <Text style={styles.orderId}>طلب #{displayOrderId}</Text>
-            <OrderStatusBadge status={currentStatus} />
-          </View>
-
-          <Text style={styles.storeName}>{order.store?.name || 'متجر'}</Text>
-
-          <View style={styles.priceContainer}>
-            <Text style={styles.totalPrice}>{order.totalPrice || 0} د.ع</Text>
-          </View>
-
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${(currentStepIndex / (statusSteps.length - 1)) * 100}%` }
-                ]}
-              />
-            </View>
-            <View style={styles.stepsContainer}>
-              {statusSteps.map((step, index) => (
-                <View key={step} style={styles.stepWrapper}>
-                  <View
-                    style={[
-                      styles.stepDot,
-                      index <= currentStepIndex && styles.stepDotActive,
-                      index === currentStepIndex && styles.stepDotCurrent,
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.stepLabel,
-                      index <= currentStepIndex && styles.stepLabelActive,
-                    ]}
-                  >
-                    {ORDER_STATUS_AR[step]}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📍 عنوان التوصيل</Text>
-            <Text style={styles.addressText}>
-              {typeof order.deliveryAddress === 'object' 
-                ? (order.deliveryAddress.addressLine || 'عنوان غير متوفر')
-                : (order.deliveryAddress || 'عنوان غير متوفر')}
-            </Text>
-            {order.deliveryAddress?.city && (
-              <Text style={styles.cityText}>{order.deliveryAddress.city}</Text>
-            )}
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🛍️ المنتجات</Text>
-            {order.items && order.items.length > 0 ? (
-              order.items.map((item, index) => (
-                <View key={index} style={styles.itemRow}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemQuantity}>x{item.qty || 1}</Text>
-                  <Text style={styles.itemPrice}>{item.price || 0} د.ع</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.noItemsText}>لا توجد منتجات لعرضها</Text>
-            )}
-          </View>
-
-          {order.notes && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📝 ملاحظات</Text>
-              <Text style={styles.notesText}>{order.notes}</Text>
-            </View>
-          )}
-
-          <View style={styles.buttonContainer}>
-            {nextAction && !isCompleted && !isCancelled && (
-              <Button
-                title={nextAction.title}
-                onPress={nextAction.action}
-                size="large"
-                fullWidth
-                loading={loading}
-              />
-            )}
-
-            {!isCompleted && !isCancelled && currentStatus !== ORDER_STATUS.CANCELLED && (
-              <Button
-                title="🗑️ إلغاء الطلب"
-                onPress={handleCancelOrder}
-                variant="danger"
-                size="large"
-                fullWidth
-                style={styles.cancelButton}
-                loading={loading}
-              />
-            )}
-
-            {isCompleted && (
-              <View style={styles.completedContainer}>
-                <Text style={styles.completedText}>✓ تم تسليم الطلب بنجاح</Text>
-                <Button
-                  title="العودة للطلبات"
-                  onPress={() => navigation.goBack()}
-                  variant="primary"
-                  size="large"
-                  fullWidth
-                />
-              </View>
-            )}
-
-            {isCancelled && (
-              <View style={styles.completedContainer}>
-                <Text style={styles.cancelledText}>✗ تم إلغاء الطلب</Text>
-                <Button
-                  title="العودة للطلبات"
-                  onPress={() => navigation.goBack()}
-                  variant="primary"
-                  size="large"
-                  fullWidth
-                />
-              </View>
-            )}
-          </View>
-        </Card>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  card: {
-    margin: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  orderId: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  storeName: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 12,
-  },
-  priceContainer: {
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
-  totalPrice: {
-    fontSize: typography.h2,
-    fontWeight: typography.bold,
-    color: colors.success,
-  },
-  progressContainer: {
-    marginBottom: 24,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: colors.divider,
-    borderRadius: 2,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 2,
-  },
-  stepsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  stepWrapper: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  stepDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.divider,
-    marginBottom: 6,
-  },
-  stepDotActive: {
-    backgroundColor: colors.success,
-  },
-  stepDotCurrent: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: colors.primary,
-    borderWidth: 2,
-    borderColor: colors.primaryLight,
-  },
-  stepLabel: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  stepLabelActive: {
-    color: colors.primary,
-    fontWeight: typography.bold,
-  },
-  section: {
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
-  sectionTitle: {
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 12,
-  },
-  addressText: {
-    fontSize: typography.body2,
-    color: colors.text,
-    marginBottom: 4,
-  },
-  cityText: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  itemName: {
-    fontSize: typography.body2,
-    color: colors.text,
-    flex: 2,
-  },
-  itemQuantity: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-    width: 50,
-    textAlign: 'center',
-  },
-  itemPrice: {
-    fontSize: typography.body2,
-    color: colors.success,
-    width: 70,
-    textAlign: 'right',
-  },
-  noItemsText: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    paddingVertical: 16,
-  },
-  notesText: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-  },
-  buttonContainer: {
-    marginTop: 8,
-  },
-  cancelButton: {
-    marginTop: 12,
-  },
-  completedContainer: {
-    alignItems: 'center',
-  },
-  completedText: {
-    fontSize: typography.h5,
-    fontWeight: typography.bold,
-    color: colors.success,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  cancelledText: {
-    fontSize: typography.h5,
-    fontWeight: typography.bold,
-    color: colors.danger,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  emptyEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: typography.body1,
-    color: colors.textSecondary,
-    marginTop: 16,
-  },
-});
-</file>
-
 <file path="src/screens/main/ChatListScreen.js">
 // src/screens/main/ChatListScreen.js - تأكد من الاستيراد
 import React, { useState, useEffect, useCallback } from 'react';
@@ -4592,6 +4011,51 @@ export const typography = {
 };
 </file>
 
+<file path="src/tasks/locationTask.js">
+// src/tasks/locationTask.js
+import * as TaskManager from 'expo-task-manager';
+import * as Location from 'expo-location';
+import DriverService from '../api/driverService';
+import { emitEvent, getSocket } from '../api/socket';
+
+export const LOCATION_TASK_NAME = 'BACKGROUND_LOCATION_TASK';
+
+// ✅ تسجيل المهمة مرة واحدة فقط
+if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
+  TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+    if (error) {
+      console.error('Background location task error:', error);
+      return;
+    }
+    
+    if (data && data.locations) {
+      const { locations } = data;
+      const location = locations[0];
+      
+      if (location) {
+        const { latitude, longitude } = location.coords;
+        
+        console.log(`📍 Background location update: ${latitude}, ${longitude}`);
+        
+        // تحديث الموقع إلى الخادم
+        const result = await DriverService.updateLocation(latitude, longitude);
+        
+        // إرسال عبر Socket إذا كان متصلاً
+        const socket = getSocket();
+        if (socket && socket.connected && result.success) {
+          emitEvent('driver:location:updated', {
+            latitude,
+            longitude,
+            timestamp: new Date().toISOString(),
+            source: 'background'
+          });
+        }
+      }
+    }
+  });
+}
+</file>
+
 <file path="src/utils/notifications.js">
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -4764,6 +4228,41 @@ jobs:
         run: eas build --platform android --profile production --non-interactive
 </file>
 
+<file path="App.js">
+// App.js
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Platform } from 'react-native';
+import ErrorBoundary from './src/components/common/ErrorBoundary';
+import AppNavigator from './src/navigation/AppNavigator';
+import { colors } from './src/styles/colors';
+
+// ✅ استيراد مهمة الخلفية (للتسجيل)
+import './src/tasks/locationTask';
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <NavigationContainer>
+            <StatusBar 
+              style={Platform.OS === 'android' ? 'light' : 'dark'} 
+              backgroundColor={colors.primary}
+              translucent={false}
+            />
+            <AppNavigator />
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
+  );
+}
+</file>
+
 <file path="src/api/client.js">
 // src/api/client.js - المصدر الرئيسي للإعدادات
 import axios from 'axios';
@@ -4877,8 +4376,665 @@ apiClient.interceptors.response.use(
 export default apiClient;
 </file>
 
+<file path="src/screens/main/ActiveOrderScreen.js">
+// src/screens/main/ActiveOrderScreen.js - الملف الكامل
+
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import * as Location from 'expo-location';
+import Header from '../../components/common/Header';
+import Button from '../../components/common/Button';
+import Card from '../../components/common/Card';
+import LoadingOverlay from '../../components/common/LoadingOverlay';
+import OrderStatusBadge from '../../components/orders/OrderStatusBadge';
+import DriverService from '../../api/driverService';
+import { emitEvent, getSocket } from '../../api/socket';
+import useLocation from '../../hooks/useLocation';
+import { colors } from '../../styles/colors';
+import { typography } from '../../styles/typography';
+import { globalStyles } from '../../styles/globalStyles';
+import { ORDER_STATUS, ORDER_STATUS_AR } from '../../utils/constants';
+
+export default function ActiveOrderScreen() {
+  const route = useRoute();
+  const navigation = useNavigation();
+
+  const [order, setOrder] = useState(route?.params?.order || null);
+  const [loading, setLoading] = useState(false);
+  const [loadingOrder, setLoadingOrder] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(ORDER_STATUS.PENDING);
+  const { updateLocation, currentLocation, isTracking } = useLocation(true, 10000);
+
+  const orderId = order?.id || order?._id || route?.params?.orderId;
+
+  useEffect(() => {
+    const fetchOrderIfNeeded = async () => {
+      const passedOrder = route?.params?.order;
+      const passedOrderId = route?.params?.orderId;
+
+      if (passedOrder) {
+        setOrder(passedOrder);
+        setCurrentStatus(passedOrder.status || ORDER_STATUS.PENDING);
+        return;
+      }
+
+      if (passedOrderId && !passedOrder) {
+        setLoadingOrder(true);
+        try {
+          const fetchedOrder = await DriverService.getOrderDetails(passedOrderId);
+          if (fetchedOrder) {
+            setOrder(fetchedOrder);
+            setCurrentStatus(fetchedOrder.status || ORDER_STATUS.PENDING);
+          } else {
+            Alert.alert('خطأ', 'لم يتم العثور على الطلب');
+            navigation.goBack();
+          }
+        } catch (error) {
+          console.error('Error fetching order:', error);
+          Alert.alert('خطأ', 'حدث خطأ أثناء جلب بيانات الطلب');
+          navigation.goBack();
+        } finally {
+          setLoadingOrder(false);
+        }
+      }
+    };
+
+    fetchOrderIfNeeded();
+  }, [route?.params]);
+
+  const statusSteps = [
+    ORDER_STATUS.PENDING,
+    ORDER_STATUS.ACCEPTED,
+    ORDER_STATUS.READY,
+    ORDER_STATUS.PICKED,
+    ORDER_STATUS.DELIVERED,
+  ];
+  const currentStepIndex = statusSteps.indexOf(currentStatus);
+
+  const updateStatus = async (newStatus) => {
+    if (!orderId) {
+      Alert.alert('خطأ', 'معرف الطلب غير موجود');
+      return;
+    }
+
+    if (newStatus === currentStatus) {
+      Alert.alert('تنبيه', 'الطلب بالفعل في هذه الحالة');
+      return;
+    }
+
+    setLoading(true);
+
+    let locationData = null;
+    try {
+      const locationResult = await updateLocation();
+      if (locationResult?.success && currentLocation) {
+        locationData = {
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude
+        };
+        console.log('📍 Current location for status update:', locationData);
+      } else {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const directLocation = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High
+          });
+          if (directLocation) {
+            locationData = {
+              latitude: directLocation.coords.latitude,
+              longitude: directLocation.coords.longitude
+            };
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Location update error (non-critical):', error);
+    }
+
+    let result;
+
+    try {
+      if (newStatus === ORDER_STATUS.READY) {
+        result = await DriverService.updateOrderStatus(orderId, 'ready', locationData);
+      } else if (newStatus === ORDER_STATUS.PICKED) {
+        result = await DriverService.updateOrderStatus(orderId, 'picked', locationData);
+      } else if (newStatus === ORDER_STATUS.DELIVERED) {
+        result = await DriverService.updateOrderStatus(orderId, 'delivered', locationData);
+      } else {
+        result = await DriverService.updateOrderStatus(orderId, newStatus, locationData);
+      }
+    } catch (error) {
+      console.error('API Error:', error);
+      result = { success: false, message: error.message || 'حدث خطأ في الاتصال' };
+    }
+
+    if (result.success) {
+      setCurrentStatus(newStatus);
+
+      if (order) {
+        setOrder({ ...order, status: newStatus });
+      }
+
+      const socket = getSocket();
+      if (socket && socket.connected) {
+        emitEvent('order:status:updated', {
+          orderId: orderId,
+          status: newStatus,
+          location: locationData,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (newStatus === ORDER_STATUS.DELIVERED) {
+        Alert.alert('نجاح', 'تم تسليم الطلب بنجاح');
+        navigation.goBack();
+      } else {
+        Alert.alert('تم', 'تم تحديث حالة الطلب');
+      }
+    } else {
+      Alert.alert('خطأ', result.message || 'فشل تحديث حالة الطلب');
+    }
+
+    setLoading(false);
+  };
+
+  const handleStartDelivery = async () => {
+    if (!orderId) {
+      Alert.alert('خطأ', 'معرف الطلب غير موجود');
+      return;
+    }
+
+    if (currentStatus !== ORDER_STATUS.READY) {
+      Alert.alert('تنبيه', 'لا يمكن بدء التوصيل إلا بعد أن يصبح الطلب جاهزاً');
+      return;
+    }
+
+    setLoading(true);
+
+    let locationData = null;
+    try {
+      const locationResult = await updateLocation();
+      if (locationResult?.success && currentLocation) {
+        locationData = {
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude
+        };
+      }
+    } catch (error) {
+      console.log('Location update error:', error);
+    }
+
+    const result = await DriverService.updateOrderStatus(orderId, 'picked', locationData);
+    setLoading(false);
+
+    if (result.success) {
+      setCurrentStatus(ORDER_STATUS.PICKED);
+      if (order) {
+        setOrder({ ...order, status: ORDER_STATUS.PICKED });
+      }
+      Alert.alert('نجاح', 'تم بدء التوصيل');
+    } else {
+      Alert.alert('خطأ', result.message);
+    }
+  };
+
+  const handleCancelOrder = () => {
+    if (!orderId) {
+      Alert.alert('خطأ', 'معرف الطلب غير موجود');
+      return;
+    }
+
+    if (currentStatus === ORDER_STATUS.DELIVERED) {
+      Alert.alert('تنبيه', 'لا يمكن إلغاء طلب تم تسليمه');
+      return;
+    }
+
+    Alert.alert(
+      'إلغاء الطلب',
+      'هل أنت متأكد من إلغاء هذا الطلب؟',
+      [
+        { text: 'لا', style: 'cancel' },
+        {
+          text: 'نعم، إلغاء',
+          onPress: async () => {
+            setLoading(true);
+            const result = await DriverService.updateOrderStatus(orderId, ORDER_STATUS.CANCELLED);
+            setLoading(false);
+            if (result.success) {
+              Alert.alert('تم', 'تم إلغاء الطلب');
+              navigation.goBack();
+            } else {
+              Alert.alert('خطأ', result.message);
+            }
+          },
+          style: 'destructive'
+        }
+      ]
+    );
+  };
+
+  const getNextAction = () => {
+    switch (currentStatus) {
+      case ORDER_STATUS.PENDING:
+        return { title: '✅ قبول الطلب', action: () => updateStatus(ORDER_STATUS.ACCEPTED) };
+      case ORDER_STATUS.ACCEPTED:
+        return { 
+          title: '⏳ جاري تجهيز الطلب', 
+          action: null, 
+          disabled: true,
+          note: 'الطلب قيد التحضير من قبل المتجر'
+        };
+      case ORDER_STATUS.READY:
+        return { title: '🚚 بدء التوصيل', action: handleStartDelivery };
+      case ORDER_STATUS.PICKED:
+        return { title: '📦 تم التوصيل', action: () => updateStatus(ORDER_STATUS.DELIVERED) };
+      default:
+        return null;
+    }
+  };
+
+  if (loadingOrder) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea}>
+        <Header title="الطلب الحالي" showBack />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>جاري تحميل بيانات الطلب...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!order) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea}>
+        <Header title="الطلب الحالي" showBack />
+        <View style={globalStyles.emptyContainer}>
+          <Text style={styles.emptyEmoji}>🚚</Text>
+          <Text style={globalStyles.emptyText}>لا يوجد طلب نشط حالياً</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const nextAction = getNextAction();
+  const isCompleted = currentStatus === ORDER_STATUS.DELIVERED;
+  const isCancelled = currentStatus === ORDER_STATUS.CANCELLED;
+  const displayOrderId = orderId?.slice(-8) || '00000000';
+
+  return (
+    <SafeAreaView style={globalStyles.safeArea}>
+      <LoadingOverlay visible={loading} message="جاري التحديث..." />
+      <Header title="الطلب الحالي" showBack />
+
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <Card style={styles.card}>
+          <View style={styles.header}>
+            <Text style={styles.orderId}>طلب #{displayOrderId}</Text>
+            <OrderStatusBadge status={currentStatus} />
+          </View>
+
+          <Text style={styles.storeName}>{order.store?.name || 'متجر'}</Text>
+
+          <View style={styles.priceContainer}>
+            <Text style={styles.totalPrice}>{order.totalPrice || 0} د.ع</Text>
+          </View>
+
+          <View style={styles.progressContainer}>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${(currentStepIndex / (statusSteps.length - 1)) * 100}%` }
+                ]}
+              />
+            </View>
+            <View style={styles.stepsContainer}>
+              {statusSteps.map((step, index) => (
+                <View key={step} style={styles.stepWrapper}>
+                  <View
+                    style={[
+                      styles.stepDot,
+                      index <= currentStepIndex && styles.stepDotActive,
+                      index === currentStepIndex && styles.stepDotCurrent,
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.stepLabel,
+                      index <= currentStepIndex && styles.stepLabelActive,
+                    ]}
+                  >
+                    {ORDER_STATUS_AR[step]}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>📍 عنوان التوصيل</Text>
+            <Text style={styles.addressText}>
+              {typeof order.deliveryAddress === 'object' 
+                ? (order.deliveryAddress.addressLine || 'عنوان غير متوفر')
+                : (order.deliveryAddress || 'عنوان غير متوفر')}
+            </Text>
+            {order.deliveryAddress?.city && (
+              <Text style={styles.cityText}>{order.deliveryAddress.city}</Text>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>🛍️ المنتجات</Text>
+            {order.items && order.items.length > 0 ? (
+              order.items.map((item, index) => (
+                <View key={index} style={styles.itemRow}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemQuantity}>x{item.qty || 1}</Text>
+                  <Text style={styles.itemPrice}>{item.price || 0} د.ع</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.noItemsText}>لا توجد منتجات لعرضها</Text>
+            )}
+          </View>
+
+          {order.notes && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>📝 ملاحظات</Text>
+              <Text style={styles.notesText}>{order.notes}</Text>
+            </View>
+          )}
+
+          <View style={styles.buttonContainer}>
+            {nextAction && !isCompleted && !isCancelled && (
+              <Button
+                title={nextAction.title}
+                onPress={nextAction.action}
+                size="large"
+                fullWidth
+                loading={loading}
+              />
+            )}
+
+            {!isCompleted && !isCancelled && currentStatus !== ORDER_STATUS.CANCELLED && (
+              <Button
+                title="🗑️ إلغاء الطلب"
+                onPress={handleCancelOrder}
+                variant="danger"
+                size="large"
+                fullWidth
+                style={styles.cancelButton}
+                loading={loading}
+              />
+            )}
+
+            {isCompleted && (
+              <View style={styles.completedContainer}>
+                <Text style={styles.completedText}>✓ تم تسليم الطلب بنجاح</Text>
+                <Button
+                  title="العودة للطلبات"
+                  onPress={() => navigation.goBack()}
+                  variant="primary"
+                  size="large"
+                  fullWidth
+                />
+              </View>
+            )}
+
+            {isCancelled && (
+              <View style={styles.completedContainer}>
+                <Text style={styles.cancelledText}>✗ تم إلغاء الطلب</Text>
+                <Button
+                  title="العودة للطلبات"
+                  onPress={() => navigation.goBack()}
+                  variant="primary"
+                  size="large"
+                  fullWidth
+                />
+              </View>
+            )}
+          </View>
+        </Card>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  card: {
+    margin: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orderId: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+  },
+  storeName: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: 12,
+  },
+  priceContainer: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  totalPrice: {
+    fontSize: typography.h2,
+    fontWeight: typography.bold,
+    color: colors.success,
+  },
+  progressContainer: {
+    marginBottom: 24,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: colors.divider,
+    borderRadius: 2,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  stepsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  stepWrapper: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  stepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.divider,
+    marginBottom: 6,
+  },
+  stepDotActive: {
+    backgroundColor: colors.success,
+  },
+  stepDotCurrent: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.primaryLight,
+  },
+  stepLabel: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  stepLabelActive: {
+    color: colors.primary,
+    fontWeight: typography.bold,
+  },
+  section: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  sectionTitle: {
+    fontSize: typography.body1,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: 12,
+  },
+  addressText: {
+    fontSize: typography.body2,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  cityText: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  itemName: {
+    fontSize: typography.body2,
+    color: colors.text,
+    flex: 2,
+  },
+  itemQuantity: {
+    fontSize: typography.body2,
+    color: colors.textSecondary,
+    width: 50,
+    textAlign: 'center',
+  },
+  itemPrice: {
+    fontSize: typography.body2,
+    color: colors.success,
+    width: 70,
+    textAlign: 'right',
+  },
+  noItemsText: {
+    fontSize: typography.body2,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  notesText: {
+    fontSize: typography.body2,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  buttonContainer: {
+    marginTop: 8,
+  },
+  cancelButton: {
+    marginTop: 12,
+  },
+  completedContainer: {
+    alignItems: 'center',
+  },
+  completedText: {
+    fontSize: typography.h5,
+    fontWeight: typography.bold,
+    color: colors.success,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  cancelledText: {
+    fontSize: typography.h5,
+    fontWeight: typography.bold,
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  emptyEmoji: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: typography.body1,
+    color: colors.textSecondary,
+    marginTop: 16,
+  },
+});
+</file>
+
+<file path="package.json">
+{
+  "name": "driver-app",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "11.4.1",
+    "@react-navigation/bottom-tabs": "^6.6.1",
+    "@react-navigation/native": "^6.1.18",
+    "@react-navigation/native-stack": "^6.11.0",
+    "axios": "^1.14.0",
+    "expo": "~54.0.33",
+    "expo-background-fetch": "~14.0.2",
+    "expo-battery": "~10.0.2",
+    "expo-build-properties": "~1.0.10",
+    "expo-dev-client": "~6.0.20",
+    "expo-device": "~8.0.10",
+    "expo-font": "~14.0.11",
+    "expo-haptics": "~15.0.8",
+    "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.16",
+    "expo-secure-store": "~15.0.8",
+    "expo-status-bar": "~3.0.9",
+    "expo-task-manager": "~14.0.2",
+    "expo-updates": "~29.0.16",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-maps": "1.20.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "socket.io-client": "^4.8.3",
+    "zustand": "^4.5.7"
+  }
+}
+</file>
+
 <file path="src/api/driverService.js">
-// src/api/driverService.js - النسخة النهائية المعدلة بالكامل
+// src/api/driverService.js - الملف الكامل المعدل
 
 import apiClient from './client';
 import { getSecureItem, saveSecureItem, deleteSecureItem } from '../utils/storage';
@@ -4941,7 +5097,6 @@ class DriverService {
     }
   }
 
-  // ✅ تعديل: تبديل حالة التوفر فقط (isAvailable)
   async toggleAvailability(isAvailable) {
     try {
       console.log('📤 Toggling availability:', { isAvailable });
@@ -4966,10 +5121,6 @@ class DriverService {
     }
   }
 
-  /**
-   * ✅ تبديل حالة الاتصال فقط (isOnline)
-   * يستخدم endpoint /driver/online
-   */
   async toggleOnline(isOnline) {
     try {
       console.log('📤 Toggling online status:', { isOnline });
@@ -4994,8 +5145,6 @@ class DriverService {
     }
   }
 
-
-  // ✅ جديد: جلب الحالة التفصيلية للمندوب
   async getDetailedStatus() {
     try {
       const response = await apiClient.get(`${this.baseUrl}/status`);
@@ -5011,38 +5160,35 @@ class DriverService {
     }
   }
 
-
-  // src/api/driverService.js - جزء updateLocation فقط
-
-async updateLocation(latitude, longitude, orderId = null) {
-  try {
-    // التحقق من صحة الإحداثيات
-    if (!latitude || !longitude) {
-      console.warn('Invalid coordinates:', { latitude, longitude });
-      return { success: false, message: 'إحداثيات غير صالحة' };
+  async updateLocation(latitude, longitude, orderId = null) {
+    try {
+      if (!latitude || !longitude) {
+        console.warn('Invalid coordinates:', { latitude, longitude });
+        return { success: false, message: 'إحداثيات غير صالحة' };
+      }
+      
+      const updateTime = new Date().toISOString();
+      
+      const response = await apiClient.put(`${this.baseUrl}/location`, {
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        orderId: orderId || null,
+        timestamp: updateTime
+      });
+      
+      console.log(`📍 Location updated at ${updateTime}: ${latitude}, ${longitude}`);
+      
+      return { success: true, data: response.data, timestamp: updateTime };
+    } catch (error) {
+      if (error.response?.status !== 400) {
+        console.error('Update location error:', error.response?.status, error.response?.data);
+      }
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تحديث الموقع'
+      };
     }
-    
-    const response = await apiClient.put(`${this.baseUrl}/location`, {
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
-      orderId: orderId || null
-    });
-    
-    return { success: true, data: response.data };
-  } catch (error) {
-    // فقط سجل الخطأ مرة واحدة
-    if (error.response?.status !== 400) {
-      console.error('Update location error:', error.response?.status, error.response?.data);
-    }
-    return {
-      success: false,
-      message: error.response?.data?.message || 'فشل تحديث الموقع'
-    };
   }
-}
-
-
-
 
   async getCurrentLocation() {
     try {
@@ -5087,7 +5233,6 @@ async updateLocation(latitude, longitude, orderId = null) {
         orders = response.data.data.orders || [];
         stats = response.data.data.stats || {};
 
-        // ✅ قراءة حالة المندوب من API
         if (response.data.data.driverStatus) {
           isAvailable = response.data.data.driverStatus.isAvailable || false;
           isOnline = response.data.data.driverStatus.isOnline || false;
@@ -5330,8 +5475,6 @@ async updateLocation(latitude, longitude, orderId = null) {
     }
   }
 
-  // ========== دوال مساعدة ==========
-
   normalizeOrder(order) {
     if (!order) return null;
 
@@ -5353,15 +5496,12 @@ async updateLocation(latitude, longitude, orderId = null) {
     return (orders || []).map(order => this.normalizeOrder(order));
   }
 
-  // ✅ دالة مساعدة لنص الحالة
   getDriverStatusText(driver) {
     if (driver.hasActiveOrder) return 'مشغول (في توصيلة)';
     if (driver.isOnline && driver.isAvailable) return 'متاح ✅';
     if (driver.isOnline && !driver.isAvailable) return 'غير متاح ⛔';
     return 'غير متصل 📴';
   }
-
-
 
   normalizeUser(user) {
     if (!user) return null;
@@ -5397,13 +5537,11 @@ async updateLocation(latitude, longitude, orderId = null) {
       isVerified: isVerifiedValue,
       isOnline: isOnlineValue,
       isAvailable: isAvailableValue,
-
       statusText: this.getDriverStatusText({
         isOnline: isOnlineValue,
         isAvailable: isAvailableValue,
         hasActiveOrder: false
       }),
-
       totalDeliveries: user.driverInfo?.totalDeliveries || 0,
       earnings: user.driverInfo?.earnings || 0,
       rating: user.driverInfo?.rating || 0,
@@ -5414,9 +5552,6 @@ async updateLocation(latitude, longitude, orderId = null) {
       role: user.role || 'driver'
     };
   }
-
-
-
 
   getStatusText(status) {
     const statusMap = {
@@ -5446,10 +5581,12 @@ export default new DriverService();
 </file>
 
 <file path="src/api/socket.js">
-// src/api/socket.js - يستورد الإعدادات من client.js
+// src/api/socket.js - الملف الكامل المعدل
+
 import { io } from 'socket.io-client';
 import { getSecureItem } from '../utils/storage';
-import { CONFIG } from './client';  // ✅ استيراد الإعدادات من client.js
+import { CONFIG } from './client';
+import * as Notifications from 'expo-notifications';
 
 const SOCKET_URL = CONFIG.SOCKET_URL;
 
@@ -5457,8 +5594,8 @@ console.log(`🔌 Using Socket: ${SOCKET_URL}`);
 
 let socket = null;
 let listeners = new Map();
+let continuousInterval = null;
 
-// الاتصال بخادم WebSocket
 export const connectSocket = async () => {
   const token = await getSecureItem('accessToken');
   if (!token) {
@@ -5491,14 +5628,9 @@ export const connectSocket = async () => {
     console.log('Socket disconnected:', reason);
   });
 
-
-
-  // أضف هذه الأحداث في دالة connectSocket
-
   socket.on('notification:new', (data) => {
     console.log('🔔 New notification via socket:', data);
 
-    // عرض إشعار محلي
     Notifications.scheduleNotificationAsync({
       content: {
         title: data.title,
@@ -5508,7 +5640,7 @@ export const connectSocket = async () => {
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },
       trigger: null,
-    });
+    }).catch(err => console.log('Notification error:', err));
   });
 
   socket.on('driver:new-order', (data) => {
@@ -5523,26 +5655,29 @@ export const connectSocket = async () => {
         priority: Notifications.AndroidNotificationPriority.MAX,
       },
       trigger: null,
-    });
+    }).catch(err => console.log('Notification error:', err));
   });
 
   socket.on('order:status:changed', (data) => {
     Notifications.scheduleNotificationAsync({
       content: {
         title: 'تحديث الطلب',
-        body: `تم تحديث حالة الطلب #${data.orderId.slice(-6)} إلى ${data.status}`,
+        body: `تم تحديث حالة الطلب #${data.orderId?.slice(-6) || '000000'} إلى ${data.status}`,
         data: { type: 'order_update', orderId: data.orderId },
         sound: true,
       },
       trigger: null,
-    });
+    }).catch(err => console.log('Notification error:', err));
   });
 
   return socket;
 };
 
-// قطع الاتصال
 export const disconnectSocket = () => {
+  if (continuousInterval) {
+    clearInterval(continuousInterval);
+    continuousInterval = null;
+  }
   if (socket) {
     socket.disconnect();
     socket = null;
@@ -5550,10 +5685,8 @@ export const disconnectSocket = () => {
   }
 };
 
-// الحصول على كائن socket
 export const getSocket = () => socket;
 
-// الاستماع للأحداث
 export const onEvent = (eventName, callback) => {
   if (socket) {
     socket.on(eventName, callback);
@@ -5564,7 +5697,6 @@ export const onEvent = (eventName, callback) => {
   }
 };
 
-// إزالة الاستماع
 export const offEvent = (eventName, callback) => {
   if (socket) {
     socket.off(eventName, callback);
@@ -5579,7 +5711,6 @@ export const offEvent = (eventName, callback) => {
   }
 };
 
-// إرسال حدث
 export const emitEvent = (eventName, data) => {
   if (socket && socket.connected) {
     socket.emit(eventName, data);
@@ -5588,29 +5719,47 @@ export const emitEvent = (eventName, data) => {
   return false;
 };
 
-// ========== أحداث المندوب ==========
+export const onDriverLocationUpdate = (callback) => {
+  onEvent('driver:location:updated', callback);
+};
 
-// استماع لحدث طلب جديد
+export const requestDriverLocation = (driverId) => {
+  emitEvent('admin:request:driver:location', { driverId });
+};
+
+export const startContinuousLocationUpdates = (callback, interval = 10000) => {
+  if (continuousInterval) clearInterval(continuousInterval);
+  
+  continuousInterval = setInterval(async () => {
+    if (socket && socket.connected && callback) {
+      callback();
+    }
+  }, interval);
+};
+
+export const stopContinuousLocationUpdates = () => {
+  if (continuousInterval) {
+    clearInterval(continuousInterval);
+    continuousInterval = null;
+  }
+};
+
 export const onNewOrder = (callback) => {
   onEvent('driver:new-order', callback);
 };
 
-// استماع لحدث تحديث الطلب
 export const onOrderUpdated = (callback) => {
   onEvent('order:status:updated', callback);
 };
 
-// استماع لحدث إلغاء الطلب
 export const onOrderCancelled = (callback) => {
   onEvent('driver:order-cancelled', callback);
 };
 
-// استماع لحدث طلب موقع
 export const onDriverLocationRequest = (callback) => {
   onEvent('driver:location:request', callback);
 };
 
-// إرسال تحديث الموقع
 export const emitLocationUpdate = (latitude, longitude, orderId = null) => {
   emitEvent('driver:location:updated', { latitude, longitude, orderId });
 };
@@ -5743,8 +5892,8 @@ const useNotification = () => {
       handleNotificationNavigation(data);
     });
 
+    // ✅ الطريقة الصحيحة لإزالة المستمعين
     return () => {
-      // ✅ الطريقة الصحيحة لإزالة المستمعين
       if (notificationListener.current) {
         Notifications.removeNotificationSubscription(notificationListener.current);
       }
@@ -5784,6 +5933,7 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import LoadingOverlay from '../../components/common/LoadingOverlay';
 import useAuthStore from '../../store/authStore';
+import DriverService from '../../api/driverService'; // ✅ إضافة هذا السطر
 import { colors } from '../../styles/colors';
 import { typography } from '../../styles/typography';
 import { globalStyles } from '../../styles/globalStyles';
@@ -5819,10 +5969,12 @@ export default function LoginScreen() {
     const success = await login(phone, password);
     if (!success) {
       Alert.alert('خطأ', 'فشل تسجيل الدخول. تحقق من رقم الهاتف وكلمة المرور');
+      return;
     }
 
+    // ✅ إضافة التحقق من وجود profile قبل استخدامه
     const profile = await DriverService.getProfile();
-    if (profile && !profile.isAvailable) {
+    if (profile && profile.isAvailable === false) {
       await DriverService.toggleAvailability(true);
     }
   };
@@ -5924,1029 +6076,6 @@ const styles = StyleSheet.create({
   loginButton: {
     marginTop: 24,
   },
-});
-</file>
-
-<file path="src/store/authStore.js">
-// src/store/authStore.js - النسخة النهائية المصححة
-
-import { create } from 'zustand';
-import DriverService from '../api/driverService';
-import { connectSocket, disconnectSocket } from '../api/socket';
-import { saveSecureItem, deleteSecureItem, getSecureItem } from '../utils/storage';
-import { login as loginApi } from '../api/auth';
-import LocationService from '../api/location';
-
-const useAuthStore = create((set, get) => ({
-  user: null,
-  isAuthenticated: false,
-  isLoading: false,
-  error: null,
-  isOnline: false,
-  stats: {
-    todayOrders: 0,
-    totalOrders: 0,
-    rating: 0,
-    earnings: 0,
-    todayEarnings: 0,
-    weeklyEarnings: 0,
-    monthlyEarnings: 0
-  },
-
-  login: async (phone, password) => {
-    set({ isLoading: true, error: null });
-
-    try {
-      const result = await loginApi(phone, password);
-
-      if (result.success && result.user) {
-        if (result.accessToken) {
-          await saveSecureItem('accessToken', result.accessToken);
-        }
-        if (result.refreshToken) {
-          await saveSecureItem('refreshToken', result.refreshToken);
-        }
-
-        const profile = await DriverService.getProfile();
-        const stats = await DriverService.getStats();
-        const detailedStatus = await DriverService.getDetailedStatus();
-
-        await connectSocket();
-
-        set({
-          user: profile,
-          isAuthenticated: true,
-          isLoading: false,
-          isOnline: detailedStatus?.isOnline || false,
-          stats: stats || get().stats
-        });
-
-        return true;
-      } else {
-        set({ error: result.message, isLoading: false });
-        return false;
-      }
-    } catch (error) {
-      set({ error: error.message || 'فشل تسجيل الدخول', isLoading: false });
-      return false;
-    }
-  },
-
-  logout: async () => {
-    await LocationService.stopTracking();
-    disconnectSocket();
-    await deleteSecureItem('accessToken');
-    await deleteSecureItem('refreshToken');
-
-    set({
-      user: null,
-      isAuthenticated: false,
-      isOnline: false,
-      stats: { todayOrders: 0, totalOrders: 0, rating: 0, earnings: 0 }
-    });
-  },
-
-  loadUser: async () => {
-    set({ isLoading: true });
-    try {
-      const token = await getSecureItem('accessToken');
-      if (!token) {
-        set({ isAuthenticated: false, isLoading: false });
-        return false;
-      }
-      
-      const profile = await DriverService.getProfile();
-      
-      if (profile) {
-        const stats = await DriverService.getStats();
-        const detailedStatus = await DriverService.getDetailedStatus();
-        
-        await connectSocket();
-        
-        set({
-          user: profile,
-          isAuthenticated: true,
-          isLoading: false,
-          isOnline: detailedStatus?.isOnline || false,
-          stats: stats || get().stats
-        });
-        return true;
-      } else {
-        await get().logout();
-        set({ isAuthenticated: false, isLoading: false });
-        return false;
-      }
-    } catch (error) {
-      await get().logout();
-      set({ isAuthenticated: false, isLoading: false });
-      return false;
-    }
-  },
-
-  // تبديل حالة الاتصال (isOnline)
-  toggleOnlineStatus: async () => {
-    const currentState = get();
-    const isAccountActive = currentState.user?.isActive === true;
-    
-    if (!isAccountActive) {
-      return false;
-    }
-    
-    const newStatus = !currentState.isOnline;
-    const result = await DriverService.toggleOnline(newStatus);
-
-    if (result && result.success) {
-      set({ isOnline: newStatus });
-      if (currentState.user) {
-        set({ 
-          user: { 
-            ...currentState.user, 
-            isOnline: newStatus 
-          } 
-        });
-      }
-      return true;
-    }
-    return false;
-  },
-
-  // تبديل حالة التوفر (isAvailable)
-  toggleAvailability: async () => {
-    const currentState = get();
-    const isAccountActive = currentState.user?.isActive === true;
-    
-    if (!isAccountActive) {
-      return false;
-    }
-    
-    if (!currentState.isOnline) {
-      return false;
-    }
-    
-    const newStatus = !currentState.user?.isAvailable;
-    const result = await DriverService.toggleAvailability(newStatus);
-    
-    if (result && result.success) {
-      set({ 
-        user: { ...currentState.user, isAvailable: newStatus }
-      });
-      return true;
-    }
-    return false;
-  },
-
-  updateProfile: async (profileData) => {
-    const result = await DriverService.updateProfile(profileData);
-    if (result) {
-      set({ user: { ...get().user, ...result } });
-      return true;
-    }
-    return false;
-  },
-
-  updateAvatar: async (imageFile) => {
-    const result = await DriverService.updateAvatar(imageFile);
-    if (result) {
-      set({ user: { ...get().user, avatar: result.image, image: result.image } });
-      return true;
-    }
-    return false;
-  },
-
-  setStats: (stats) => set({ stats }),
-
-  refreshStats: async () => {
-    const stats = await DriverService.getStats();
-    if (stats) {
-      set({ stats });
-    }
-    return stats;
-  },
-
-  clearError: () => set({ error: null }),
-
-  setOnlineStatus: (status) => {
-    const isAccountActive = get().user?.isActive === true;
-    if (!isAccountActive && status) {
-      return;
-    }
-    set({ isOnline: status });
-  },
-
-  getDriverInfo: () => {
-    const { user, stats, isOnline } = get();
-    return {
-      ...user,
-      ...stats,
-      isOnline
-    };
-  }
-}));
-
-export default useAuthStore;
-</file>
-
-<file path="src/utils/constants.js">
-// src/utils/constants.js - يستورد الإعدادات من client.js
-import { CONFIG } from '../api/client';
-
-// استخدام نفس الروابط من client.js
-export const API_BASE_URL = CONFIG.API_URL;
-export const SOCKET_URL = CONFIG.SOCKET_URL;
-
-// حالة الطلبات
-export const ORDER_STATUS = {
-  PENDING: 'pending',
-  ACCEPTED: 'accepted',
-  READY: 'ready',
-  PICKED: 'picked',
-  DELIVERED: 'delivered',
-  CANCELLED: 'cancelled',
-};
-
-export const ORDER_STATUS_AR = {
-  [ORDER_STATUS.PENDING]: 'قيد الانتظار',
-  [ORDER_STATUS.ACCEPTED]: 'تم القبول',
-  [ORDER_STATUS.READY]: 'جاهز للتوصيل',
-  [ORDER_STATUS.PICKED]: 'تم الاستلام',
-  [ORDER_STATUS.DELIVERED]: 'تم التوصيل',
-  [ORDER_STATUS.CANCELLED]: 'ملغي',
-};
-
-export const ORDER_STATUS_COLORS = {
-  [ORDER_STATUS.PENDING]: '#FF9800',
-  [ORDER_STATUS.ACCEPTED]: '#2196F3',
-  [ORDER_STATUS.READY]: '#9C27B0',
-  [ORDER_STATUS.PICKED]: '#3F51B5',
-  [ORDER_STATUS.DELIVERED]: '#4CAF50',
-  [ORDER_STATUS.CANCELLED]: '#F44336',
-};
-
-// إعدادات إضافية
-export const MAPBOX_ACCESS_TOKEN = 'your_token_here';
-export const MAPBOX_STYLE_URL = 'mapbox://styles/mapbox/streets-v12';
-</file>
-
-<file path="package.json">
-{
-  "name": "driver-app",
-  "version": "1.0.0",
-  "main": "node_modules/expo/AppEntry.js",
-  "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
-  },
-  "dependencies": {
-    "@expo/vector-icons": "^15.1.1",
-    "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-native-community/netinfo": "11.4.1",
-    "@react-navigation/bottom-tabs": "^6.6.1",
-    "@react-navigation/native": "^6.1.18",
-    "@react-navigation/native-stack": "^6.11.0",
-    "axios": "^1.14.0",
-    "expo": "~54.0.33",
-    "expo-background-fetch": "~14.0.2",
-    "expo-battery": "~10.0.2",
-    "expo-build-properties": "~1.0.10",
-    "expo-dev-client": "~6.0.20",
-    "expo-device": "~8.0.10",
-    "expo-font": "~14.0.11",
-    "expo-haptics": "~15.0.8",
-    "expo-location": "~19.0.8",
-    "expo-notifications": "~0.32.16",
-    "expo-secure-store": "~15.0.8",
-    "expo-status-bar": "~3.0.9",
-    "expo-task-manager": "~14.0.2",
-    "expo-updates": "~29.0.16",
-    "react": "19.1.0",
-    "react-native": "0.81.5",
-    "react-native-gesture-handler": "~2.28.0",
-    "react-native-maps": "1.20.1",
-    "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.16.0",
-    "socket.io-client": "^4.8.3",
-    "zustand": "^4.5.7"
-  }
-}
-</file>
-
-<file path="src/hooks/useLocation.js">
-// src/hooks/useLocation.js - نسخة مستقرة بدون حلقات لا نهائية
-
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { AppState } from 'react-native';
-import * as Location from 'expo-location';
-import DriverService from '../api/driverService';
-
-const useLocation = (isOnline = true, updateInterval = 30000) => { // زيادة إلى 30 ثانية
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [isTracking, setIsTracking] = useState(false);
-  const [error, setError] = useState(null);
-  const intervalRef = useRef(null);
-  const isUpdatingRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  // تنظيف عند إلغاء تحميل المكون
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, []);
-
-  // تحديث الموقع إلى الخادم
-  const updateLocation = useCallback(async () => {
-    if (!isOnline || !mountedRef.current) return null;
-    if (isUpdatingRef.current) return null;
-    
-    isUpdatingRef.current = true;
-    
-    try {
-      // الحصول على الموقع الحالي
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        if (mountedRef.current) setError('صلاحية الموقع مطلوبة');
-        return null;
-      }
-      
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High
-      });
-      
-      const { latitude, longitude } = location.coords;
-      
-      // إرسال إلى الخادم
-      const result = await DriverService.updateLocation(latitude, longitude);
-      
-      if (result && result.success && mountedRef.current) {
-        setCurrentLocation({ latitude, longitude, timestamp: new Date() });
-        if (error) setError(null);
-        return result;
-      } else if (mountedRef.current) {
-        setError(result?.message || 'فشل تحديث الموقع');
-      }
-      return null;
-    } catch (err) {
-      if (mountedRef.current) {
-        setError(err.message);
-      }
-      return null;
-    } finally {
-      isUpdatingRef.current = false;
-    }
-  }, [isOnline, error]);
-
-  // بدء التتبع
-  const startTracking = useCallback(async () => {
-    if (!isOnline || !mountedRef.current) return;
-    if (isTracking) return;
-    
-    setIsTracking(true);
-    
-    // تحديث فوري
-    await updateLocation();
-    
-    // جدولة التحديثات الدورية
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(async () => {
-      await updateLocation();
-    }, updateInterval);
-  }, [isOnline, isTracking, updateLocation, updateInterval]);
-
-  // إيقاف التتبع
-  const stopTracking = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    setIsTracking(false);
-  }, []);
-
-  // بدء/إيقاف التتبع بناءً على حالة الاتصال
-  useEffect(() => {
-    if (isOnline) {
-      startTracking();
-    } else {
-      stopTracking();
-    }
-  }, [isOnline, startTracking, stopTracking]);
-
-  return {
-    currentLocation,
-    isTracking,
-    error,
-    startTracking,
-    stopTracking,
-    updateLocation,
-  };
-};
-
-export default useLocation;
-</file>
-
-<file path="src/screens/main/OrdersScreen.js">
-// src/screens/main/OrdersScreen.js - النسخة النهائية النظيفة
-
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Alert,
-  ActivityIndicator,
-  Modal,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import OrderCard from '../../components/orders/OrderCard';
-import Header from '../../components/common/Header';
-import DriverService from '../../api/driverService';
-import { connectSocket, onEvent, offEvent } from '../../api/socket';
-import useNotification from '../../hooks/useNotification';
-import useAuthStore from '../../store/authStore';
-import { colors } from '../../styles/colors';
-import { typography } from '../../styles/typography';
-import { globalStyles } from '../../styles/globalStyles';
-import OrderStatusBadge from '../../components/orders/OrderStatusBadge';
-
-export default function OrdersScreen() {
-  const navigation = useNavigation();
-  const { sendLocalNotification, updateBadgeCount } = useNotification();
-  const [availableOrders, setAvailableOrders] = useState([]);
-  const [activeOrder, setActiveOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [processingId, setProcessingId] = useState(null);
-  const [isToggling, setIsToggling] = useState(false);
-  const [showStatusModal, setShowStatusModal] = useState(false);
-  const [statusModalMessage, setStatusModalMessage] = useState('');
-  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
-  const [notificationCount, setNotificationCount] = useState(0);
-  
-  const { isOnline, toggleOnlineStatus, user } = useAuthStore();
-  
-  const flatListRef = useRef(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const switchAnim = useRef(new Animated.Value(isOnline ? 1 : 0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
-
-  const canAcceptOrders = !activeOrder && isOnline;
-
-  useEffect(() => {
-    if (canAcceptOrders && availableOrders.length > 0) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-          Animated.timing(glowAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      glowAnim.setValue(0);
-    }
-  }, [canAcceptOrders, availableOrders.length]);
-
-  const checkAccountStatus = async () => {
-    const status = await DriverService.checkAccountStatus();
-    setAccountStatus(status);
-    if (!status.isActive) {
-      Alert.alert('تنبيه', 'حسابك غير نشط. يرجى التواصل مع الدعم الفني.');
-    }
-  };
-
-  const updateDriverAvailability = useCallback(async () => {
-    if (!accountStatus.isActive) return;
-    const shouldBeAvailable = isOnline && !activeOrder;
-    await DriverService.toggleAvailability(shouldBeAvailable);
-  }, [isOnline, activeOrder, accountStatus.isActive]);
-
-  useEffect(() => {
-    updateDriverAvailability();
-  }, [activeOrder, isOnline, updateDriverAvailability]);
-
-  useEffect(() => {
-    const initDriver = async () => {
-      await checkAccountStatus();
-      await loadOrders();
-    };
-    initDriver();
-
-    if (isOnline) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.2, duration: 1000, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [isOnline]);
-
-  const loadOrders = useCallback(async () => {
-    try {
-      const availableResult = await DriverService.getAvailableOrders();
-      setAvailableOrders(availableResult.orders || []);
-      setNotificationCount(availableResult.orders?.length || 0);
-      await updateBadgeCount(availableResult.orders?.length || 0);
-
-      const activeOrderResult = await DriverService.getActiveOrder();
-      setActiveOrder(activeOrderResult);
-    } catch {
-      setActiveOrder(null);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [updateBadgeCount]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (accountStatus.isActive) {
-        loadOrders();
-      }
-    }, [loadOrders, accountStatus.isActive])
-  );
-
-  useEffect(() => {
-    const initSocket = async () => {
-      if (isOnline && accountStatus.isActive) {
-        await connectSocket();
-
-        onEvent('driver:new-order', () => {
-          loadOrders();
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        });
-
-        onEvent('driver:status:changed', () => loadOrders());
-
-        onEvent('order:status:updated', (data) => {
-          if (data.orderId === activeOrder?.id || data.orderId === activeOrder?._id) {
-            loadOrders();
-          }
-        });
-      }
-    };
-
-    initSocket();
-    return () => {
-      offEvent('driver:new-order');
-      offEvent('driver:status:changed');
-      offEvent('order:status:updated');
-    };
-  }, [isOnline, loadOrders, activeOrder, accountStatus.isActive]);
-
-  const onRefresh = useCallback(() => {
-    if (accountStatus.isActive) {
-      setRefreshing(true);
-      loadOrders();
-    }
-  }, [loadOrders, accountStatus.isActive]);
-
-  const handleAccept = async (orderId) => {
-    if (!accountStatus.isActive) {
-      Alert.alert('تنبيه', 'حسابك غير نشط');
-      return;
-    }
-
-    setProcessingId(orderId);
-    try {
-      const result = await DriverService.acceptOrder(orderId);
-      if (result.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('نجاح', 'تم قبول الطلب بنجاح');
-        await loadOrders();
-        navigation.navigate('ActiveOrder', { orderId });
-      } else {
-        Alert.alert('خطأ', result.message || 'فشل قبول الطلب');
-      }
-    } catch {
-      Alert.alert('خطأ', 'حدث خطأ أثناء قبول الطلب');
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleReject = async (orderId) => {
-    if (!accountStatus.isActive) {
-      Alert.alert('تنبيه', 'حسابك غير نشط');
-      return;
-    }
-
-    setProcessingId(orderId);
-    try {
-      const result = await DriverService.rejectOrder(orderId);
-      if (result.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setAvailableOrders(prev => prev.filter(order =>
-          (order.id !== orderId && order._id !== orderId)
-        ));
-        Alert.alert('تم', 'تم رفض الطلب');
-      } else {
-        Alert.alert('خطأ', result.message || 'فشل رفض الطلب');
-      }
-    } catch {
-      Alert.alert('خطأ', 'حدث خطأ أثناء رفض الطلب');
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleToggleOnline = async () => {
-    if (!accountStatus.isActive) {
-      Alert.alert('تنبيه', 'حسابك غير نشط');
-      return;
-    }
-    if (isToggling) return;
-    
-    setIsToggling(true);
-    setShowStatusModal(true);
-    setStatusModalMessage(isOnline ? 'جاري قطع الاتصال...' : 'جاري الاتصال...');
-    
-    const success = await toggleOnlineStatus();
-    
-    if (success) {
-      Animated.spring(switchAnim, {
-        toValue: isOnline ? 0 : 1,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 7,
-      }).start();
-      
-      setTimeout(async () => {
-        await loadOrders();
-        setShowStatusModal(false);
-      }, 500);
-    } else {
-      setShowStatusModal(false);
-    }
-    setIsToggling(false);
-  };
-
-  const goToActiveOrder = () => {
-    if (activeOrder) {
-      navigation.navigate('ActiveOrder', { order: activeOrder });
-    }
-  };
-
-  const StatusToggleButton = () => (
-    <TouchableOpacity
-      style={[
-        styles.statusToggleButton,
-        isOnline && accountStatus.isActive ? styles.statusToggleOnline : styles.statusToggleOffline,
-      ]}
-      onPress={handleToggleOnline}
-      disabled={isToggling || !accountStatus.isActive}
-      activeOpacity={0.7}
-    >
-      <Animated.View
-        style={[
-          styles.statusToggleInner,
-          {
-            transform: [{
-              translateX: switchAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 28],
-              }),
-            }],
-          },
-        ]}
-      />
-      <View style={styles.statusToggleTextContainer}>
-        <Animated.Text style={[
-          styles.statusToggleText,
-          {
-            opacity: switchAnim.interpolate({
-              inputRange: [0, 0.5, 1],
-              outputRange: [1, 0.5, 1],
-            }),
-          },
-        ]}>
-          {isOnline ? '🟢 متصل' : '🔴 غير متصل'}
-        </Animated.Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const ActiveOrderCard = () => {
-    if (!activeOrder) return null;
-    const orderId = activeOrder.id || activeOrder._id;
-    const displayOrderId = orderId?.slice(-8) || '00000000';
-
-    return (
-      <TouchableOpacity onPress={goToActiveOrder} activeOpacity={0.8}>
-        <View style={styles.activeOrderCard}>
-          <View style={styles.activeOrderHeader}>
-            <View style={styles.activeOrderBadge}>
-              <Ionicons name="bicycle" size={16} color={colors.surface} />
-              <Text style={styles.activeOrderBadgeText}>طلب نشط</Text>
-            </View>
-            <Text style={styles.activeOrderId}>#{displayOrderId}</Text>
-          </View>
-          <Text style={styles.activeOrderStore}>{activeOrder.store?.name || 'متجر'}</Text>
-          <View style={styles.activeOrderDetails}>
-            <Text style={styles.activeOrderPriceValue}>{activeOrder.totalPrice || 0} د.ع</Text>
-            <OrderStatusBadge status={activeOrder.status} size="small" />
-          </View>
-          <View style={styles.activeOrderButton}>
-            <Text style={styles.activeOrderButtonText}>تابع الطلب →</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderHeader = () => (
-    <View style={styles.headerSection}>
-      <View style={[styles.statusCard, (isOnline && accountStatus.isActive) && styles.statusCardOnline]}>
-        <View style={styles.statusInfo}>
-          <Animated.View style={[styles.statusDotContainer, { transform: [{ scale: pulseAnim }] }]}>
-            <View style={[styles.statusDot, (isOnline && accountStatus.isActive) && styles.onlineDot]} />
-          </Animated.View>
-          <View>
-            <Text style={styles.statusLabel}>حالة المندوب</Text>
-            <Text style={[styles.statusValue, (isOnline && accountStatus.isActive) ? styles.onlineText : styles.offlineText]}>
-              {!accountStatus.isActive ? 'الحساب غير نشط' : (isOnline ? 'متصل وجاهز' : 'غير متصل')}
-            </Text>
-          </View>
-        </View>
-        <StatusToggleButton />
-      </View>
-
-      <Animated.View style={[
-        styles.availabilityCard,
-        canAcceptOrders ? styles.availabilityCardActive : styles.availabilityCardInactive,
-        canAcceptOrders && availableOrders.length > 0 && {
-          shadowColor: colors.primary,
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: glowAnim,
-          shadowRadius: 10,
-          elevation: glowAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, 8],
-          }),
-        },
-      ]}>
-        <Ionicons 
-          name={canAcceptOrders ? "checkmark-circle" : "close-circle"} 
-          size={28} 
-          color={canAcceptOrders ? colors.success : colors.danger} 
-        />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.availabilityLabel}>حالة استقبال الطلبات</Text>
-          <Text style={[styles.availabilityValue, canAcceptOrders ? styles.availabilityActive : styles.availabilityInactive]}>
-            {!isOnline ? 'غير متاح (غير متصل)' : 
-             (activeOrder ? 'غير متاح (لديك طلب جاري)' : 'متاح ✅')}
-          </Text>
-        </View>
-        {canAcceptOrders && availableOrders.length > 0 && (
-          <View style={styles.newOrdersBadge}>
-            <Text style={styles.newOrdersBadgeText}>{availableOrders.length}</Text>
-          </View>
-        )}
-      </Animated.View>
-
-      <View style={styles.driverCard}>
-        <View style={[styles.driverAvatar, (isOnline && accountStatus.isActive) && styles.driverAvatarOnline]}>
-          <Text style={styles.driverAvatarText}>{user?.name?.charAt(0) || 'م'}</Text>
-          {(isOnline && accountStatus.isActive) && (
-            <View style={styles.onlineBadge}>
-              <Ionicons name="checkmark" size={10} color={colors.surface} />
-            </View>
-          )}
-        </View>
-        <View style={styles.driverInfo}>
-          <Text style={styles.driverName}>{user?.name || 'مندوب'}</Text>
-          <Text style={styles.driverPhone}>{user?.phone}</Text>
-        </View>
-        <View style={styles.statsBadge}>
-          <Text style={styles.statsNumber}>{availableOrders.length}</Text>
-          <Text style={styles.statsLabel}>طلب جديد</Text>
-        </View>
-      </View>
-
-      <ActiveOrderCard />
-
-      {(canAcceptOrders && availableOrders.length > 0 && !activeOrder) && (
-        <View style={styles.ordersInfoCard}>
-          <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-          <Text style={styles.ordersInfoText}>{availableOrders.length} طلب جديد في انتظارك</Text>
-          <TouchableOpacity onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}>
-            <Ionicons name="arrow-down" size={20} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderItem = ({ item }) => (
-    <OrderCard
-      order={{ ...item, id: item._id }}
-      onAccept={() => handleAccept(item._id)}
-      onReject={() => handleReject(item._id)}
-      isProcessing={processingId === item._id}
-    />
-  );
-
-  if (loading && availableOrders.length === 0 && !activeOrder) {
-    return (
-      <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
-        <Header title="الطلبات" showNotification notificationCount={notificationCount} />
-        <View style={styles.initialLoadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.initialLoadingText}>جاري تحميل الطلبات...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
-      <Header title="الطلبات" showNotification notificationCount={notificationCount} />
-      
-      <Modal transparent visible={showStatusModal} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.modalText}>{statusModalMessage}</Text>
-          </View>
-        </View>
-      </Modal>
-      
-      <FlatList
-        ref={flatListRef}
-        data={availableOrders}
-        keyExtractor={(item) => item._id || item.id || Math.random().toString()}
-        ListHeaderComponent={renderHeader}
-        renderItem={renderItem}
-        ListEmptyComponent={!activeOrder ? EmptyStateComponent : null}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-            enabled={accountStatus.isActive}
-          />
-        }
-        contentContainerStyle={[
-          styles.listContent,
-          availableOrders.length === 0 && !activeOrder && styles.emptyListContent
-        ]}
-        showsVerticalScrollIndicator={false}
-      />
-    </SafeAreaView>
-  );
-}
-
-const EmptyStateComponent = () => (
-  <View style={styles.emptyContainer}>
-    <View style={styles.emptyIconContainer}>
-      <Ionicons name="bicycle-outline" size={64} color={colors.textDisabled} />
-    </View>
-    <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
-    <Text style={styles.emptySubtext}>عند توفر طلبات جديدة، ستظهر هنا تلقائياً</Text>
-  </View>
-);
-
-const styles = StyleSheet.create({
-  listContent: { padding: 16 },
-  emptyListContent: { flex: 1, justifyContent: 'center' },
-  headerSection: { marginBottom: 16 },
-  
-  statusCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.divider,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statusCardOnline: { borderColor: colors.primaryLight },
-  statusInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  statusDotContainer: { width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  statusDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.offline },
-  onlineDot: { backgroundColor: colors.success, shadowColor: colors.success, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 6, elevation: 3 },
-  statusLabel: { fontSize: typography.caption, color: colors.textSecondary },
-  statusValue: { fontSize: typography.body2, fontWeight: typography.bold },
-  onlineText: { color: colors.success },
-  offlineText: { color: colors.danger },
-  
-  statusToggleButton: {
-    width: 110,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statusToggleOnline: { backgroundColor: colors.success },
-  statusToggleOffline: { backgroundColor: colors.danger },
-  statusToggleInner: {
-    position: 'absolute',
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.surface,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  statusToggleTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  statusToggleText: { fontSize: typography.body2, fontWeight: typography.bold, color: colors.surface },
-  
-  availabilityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
-    marginBottom: 12,
-  },
-  availabilityCardActive: { backgroundColor: colors.success + '10', borderWidth: 1, borderColor: colors.success },
-  availabilityCardInactive: { backgroundColor: colors.danger + '10', borderWidth: 1, borderColor: colors.danger },
-  availabilityLabel: { fontSize: typography.caption, color: colors.textSecondary },
-  availabilityValue: { fontSize: typography.body2, fontWeight: typography.bold },
-  availabilityActive: { color: colors.success },
-  availabilityInactive: { color: colors.danger },
-  newOrdersBadge: {
-    backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    minWidth: 28,
-    alignItems: 'center',
-  },
-  newOrdersBadgeText: {
-    fontSize: typography.caption,
-    fontWeight: typography.bold,
-    color: colors.surface,
-  },
-  
-  driverCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 20, padding: 16, marginBottom: 12, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  driverAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: 12, position: 'relative' },
-  driverAvatarOnline: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  driverAvatarText: { fontSize: typography.h4, fontWeight: typography.bold, color: colors.primary },
-  driverAvatarOnlineText: { color: colors.surface },
-  onlineBadge: { position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.success, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.surface },
-  driverInfo: { flex: 1 },
-  driverName: { fontSize: typography.body1, fontWeight: typography.bold, color: colors.text },
-  driverPhone: { fontSize: typography.caption, color: colors.textSecondary, marginTop: 2 },
-  statsBadge: { backgroundColor: colors.surfaceVariant, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24, alignItems: 'center', minWidth: 70 },
-  statsNumber: { fontSize: typography.h5, fontWeight: typography.bold, color: colors.primary },
-  statsLabel: { fontSize: typography.caption, color: colors.primary },
-  
-  activeOrderCard: { backgroundColor: colors.primaryLight + '10', borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.primaryLight },
-  activeOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  activeOrderBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, gap: 6 },
-  activeOrderBadgeText: { fontSize: typography.caption, fontWeight: typography.bold, color: colors.surface },
-  activeOrderId: { fontSize: typography.caption, color: colors.textSecondary },
-  activeOrderStore: { fontSize: typography.body1, fontWeight: typography.bold, color: colors.text, marginBottom: 8 },
-  activeOrderDetails: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  activeOrderPriceValue: { fontSize: typography.h6, fontWeight: typography.bold, color: colors.success },
-  activeOrderButton: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.divider, alignItems: 'flex-end' },
-  activeOrderButtonText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium },
-  
-  ordersInfoCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.primaryLight + '10', borderWidth: 1, borderColor: colors.primaryLight, padding: 14, borderRadius: 16, marginBottom: 12 },
-  ordersInfoText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium, flex: 1 },
-  
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 60 },
-  emptyIconContainer: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
-  emptyTitle: { fontSize: 20, fontWeight: typography.bold, color: colors.textDisabled, marginBottom: 8 },
-  emptySubtext: { fontSize: typography.body2, color: colors.textSecondary, textAlign: 'center', marginTop: 8 },
-  
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: colors.surface, borderRadius: 24, padding: 32, alignItems: 'center', minWidth: 200, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
-  modalText: { fontSize: typography.body1, color: colors.text, marginTop: 16, textAlign: 'center' },
-  
-  initialLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  initialLoadingText: { fontSize: typography.body1, color: colors.textSecondary, marginTop: 16 },
 });
 </file>
 
@@ -7553,6 +6682,1150 @@ const styles = StyleSheet.create({
 });
 </file>
 
+<file path="src/store/authStore.js">
+// src/store/authStore.js - النسخة النهائية المصححة
+
+import { create } from 'zustand';
+import DriverService from '../api/driverService';
+import { connectSocket, disconnectSocket } from '../api/socket';
+import { saveSecureItem, deleteSecureItem, getSecureItem } from '../utils/storage';
+import { login as loginApi } from '../api/auth';
+import LocationService from '../api/location';
+
+const useAuthStore = create((set, get) => ({
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+  isOnline: false,
+  stats: {
+    todayOrders: 0,
+    totalOrders: 0,
+    rating: 0,
+    earnings: 0,
+    todayEarnings: 0,
+    weeklyEarnings: 0,
+    monthlyEarnings: 0
+  },
+
+  login: async (phone, password) => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const result = await loginApi(phone, password);
+
+      if (result.success && result.user) {
+        if (result.accessToken) {
+          await saveSecureItem('accessToken', result.accessToken);
+        }
+        if (result.refreshToken) {
+          await saveSecureItem('refreshToken', result.refreshToken);
+        }
+
+        const profile = await DriverService.getProfile();
+        const stats = await DriverService.getStats();
+        const detailedStatus = await DriverService.getDetailedStatus();
+
+        await connectSocket();
+
+        set({
+          user: profile,
+          isAuthenticated: true,
+          isLoading: false,
+          isOnline: detailedStatus?.isOnline || false,
+          stats: stats || get().stats
+        });
+
+        return true;
+      } else {
+        set({ error: result.message, isLoading: false });
+        return false;
+      }
+    } catch (error) {
+      set({ error: error.message || 'فشل تسجيل الدخول', isLoading: false });
+      return false;
+    }
+  },
+
+  logout: async () => {
+    await LocationService.stopTracking();
+    disconnectSocket();
+    await deleteSecureItem('accessToken');
+    await deleteSecureItem('refreshToken');
+
+    set({
+      user: null,
+      isAuthenticated: false,
+      isOnline: false,
+      stats: { todayOrders: 0, totalOrders: 0, rating: 0, earnings: 0 }
+    });
+  },
+
+  loadUser: async () => {
+    set({ isLoading: true });
+    try {
+      const token = await getSecureItem('accessToken');
+      if (!token) {
+        set({ isAuthenticated: false, isLoading: false });
+        return false;
+      }
+      
+      const profile = await DriverService.getProfile();
+      
+      if (profile) {
+        const stats = await DriverService.getStats();
+        const detailedStatus = await DriverService.getDetailedStatus();
+        
+        await connectSocket();
+        
+        set({
+          user: profile,
+          isAuthenticated: true,
+          isLoading: false,
+          isOnline: detailedStatus?.isOnline || false,
+          stats: stats || get().stats
+        });
+        return true;
+      } else {
+        await get().logout();
+        set({ isAuthenticated: false, isLoading: false });
+        return false;
+      }
+    } catch (error) {
+      await get().logout();
+      set({ isAuthenticated: false, isLoading: false });
+      return false;
+    }
+  },
+
+  // تبديل حالة الاتصال (isOnline)
+  toggleOnlineStatus: async () => {
+    const currentState = get();
+    const isAccountActive = currentState.user?.isActive === true;
+    
+    if (!isAccountActive) {
+      return false;
+    }
+    
+    const newStatus = !currentState.isOnline;
+    const result = await DriverService.toggleOnline(newStatus);
+
+    if (result && result.success) {
+      set({ isOnline: newStatus });
+      if (currentState.user) {
+        set({ 
+          user: { 
+            ...currentState.user, 
+            isOnline: newStatus 
+          } 
+        });
+      }
+      return true;
+    }
+    return false;
+  },
+
+  // تبديل حالة التوفر (isAvailable)
+  toggleAvailability: async () => {
+    const currentState = get();
+    const isAccountActive = currentState.user?.isActive === true;
+    
+    if (!isAccountActive) {
+      return false;
+    }
+    
+    if (!currentState.isOnline) {
+      return false;
+    }
+    
+    const newStatus = !currentState.user?.isAvailable;
+    const result = await DriverService.toggleAvailability(newStatus);
+    
+    if (result && result.success) {
+      set({ 
+        user: { ...currentState.user, isAvailable: newStatus }
+      });
+      return true;
+    }
+    return false;
+  },
+
+  updateProfile: async (profileData) => {
+    const result = await DriverService.updateProfile(profileData);
+    if (result) {
+      set({ user: { ...get().user, ...result } });
+      return true;
+    }
+    return false;
+  },
+
+  updateAvatar: async (imageFile) => {
+    const result = await DriverService.updateAvatar(imageFile);
+    if (result) {
+      set({ user: { ...get().user, avatar: result.image, image: result.image } });
+      return true;
+    }
+    return false;
+  },
+
+  setStats: (stats) => set({ stats }),
+
+  refreshStats: async () => {
+    const stats = await DriverService.getStats();
+    if (stats) {
+      set({ stats });
+    }
+    return stats;
+  },
+
+  clearError: () => set({ error: null }),
+
+  setOnlineStatus: (status) => {
+    const isAccountActive = get().user?.isActive === true;
+    if (!isAccountActive && status) {
+      return;
+    }
+    set({ isOnline: status });
+  },
+
+  getDriverInfo: () => {
+    const { user, stats, isOnline } = get();
+    return {
+      ...user,
+      ...stats,
+      isOnline
+    };
+  }
+}));
+
+export default useAuthStore;
+</file>
+
+<file path="src/utils/constants.js">
+// src/utils/constants.js - يستورد الإعدادات من client.js
+import { CONFIG } from '../api/client';
+
+// استخدام نفس الروابط من client.js
+export const API_BASE_URL = CONFIG.API_URL;
+export const SOCKET_URL = CONFIG.SOCKET_URL;
+
+// حالة الطلبات
+export const ORDER_STATUS = {
+  PENDING: 'pending',
+  ACCEPTED: 'accepted',
+  READY: 'ready',
+  PICKED: 'picked',
+  DELIVERED: 'delivered',
+  CANCELLED: 'cancelled',
+};
+
+export const ORDER_STATUS_AR = {
+  [ORDER_STATUS.PENDING]: 'قيد الانتظار',
+  [ORDER_STATUS.ACCEPTED]: 'تم القبول',
+  [ORDER_STATUS.READY]: 'جاهز للتوصيل',
+  [ORDER_STATUS.PICKED]: 'تم الاستلام',
+  [ORDER_STATUS.DELIVERED]: 'تم التوصيل',
+  [ORDER_STATUS.CANCELLED]: 'ملغي',
+};
+
+export const ORDER_STATUS_COLORS = {
+  [ORDER_STATUS.PENDING]: '#FF9800',
+  [ORDER_STATUS.ACCEPTED]: '#2196F3',
+  [ORDER_STATUS.READY]: '#9C27B0',
+  [ORDER_STATUS.PICKED]: '#3F51B5',
+  [ORDER_STATUS.DELIVERED]: '#4CAF50',
+  [ORDER_STATUS.CANCELLED]: '#F44336',
+};
+
+// إعدادات إضافية
+export const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoid2FsaWQyNSIsImEiOiJjbW4xY3Fma3kwdmxiMnJyMHNqbzNuczBvIn0.6T6xCsIWM3wuaL_QZpwjWA';
+export const MAPBOX_STYLE_URL = 'mapbox://styles/mapbox/streets-v12';
+</file>
+
+<file path="src/hooks/useLocation.js">
+// src/hooks/useLocation.js - نسخة مستقلة بدون أخطاء
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { AppState, Platform } from 'react-native';
+import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
+import DriverService from '../api/driverService';
+import { emitEvent, getSocket } from '../api/socket';
+import { LOCATION_TASK_NAME } from '../tasks/locationTask';
+
+const useLocation = (isOnline = true, updateInterval = 10000) => {
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [isTracking, setIsTracking] = useState(false);
+  const [error, setError] = useState(null);
+  const [isInBackground, setIsInBackground] = useState(false);
+  const watchPositionRef = useRef(null);
+  const mountedRef = useRef(true);
+  const backgroundTaskStarted = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
+
+  // طلب الصلاحيات
+  const requestPermissions = useCallback(async () => {
+    try {
+      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+      if (foregroundStatus !== 'granted') {
+        setError('صلاحية الموقع مطلوبة للتطبيق');
+        return false;
+      }
+      
+      if (Platform.OS === 'android') {
+        const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+        if (backgroundStatus !== 'granted') {
+          console.log('Background location permission not granted - will use foreground only');
+        }
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('Permission error:', err);
+      setError(err.message);
+      return false;
+    }
+  }, []);
+
+  // بدء التتبع المباشر (في المقدمة)
+  const startForegroundTracking = useCallback(async () => {
+    if (!isOnline || !mountedRef.current) return;
+    if (watchPositionRef.current) return;
+    
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+    
+    try {
+      watchPositionRef.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: updateInterval,
+          distanceInterval: 5,
+        },
+        async (location) => {
+          if (!mountedRef.current) return;
+          
+          const { latitude, longitude, speed, heading } = location.coords;
+          
+          console.log(`📍 Foreground location: ${latitude}, ${longitude}`);
+          
+          setCurrentLocation({
+            latitude,
+            longitude,
+            speed,
+            heading,
+            timestamp: new Date()
+          });
+          
+          const result = await DriverService.updateLocation(latitude, longitude);
+          
+          const socket = getSocket();
+          if (socket?.connected && result.success) {
+            emitEvent('driver:location:updated', {
+              latitude,
+              longitude,
+              speed,
+              heading,
+              timestamp: new Date().toISOString(),
+              source: 'foreground'
+            });
+          }
+        }
+      );
+      
+      console.log('✅ Foreground tracking started (every 10 seconds)');
+    } catch (err) {
+      console.error('Watch position error:', err);
+      setError(err.message);
+    }
+  }, [isOnline, requestPermissions, updateInterval]);
+
+  // إيقاف التتبع المباشر
+  const stopForegroundTracking = useCallback(() => {
+    if (watchPositionRef.current) {
+      watchPositionRef.current.remove();
+      watchPositionRef.current = null;
+      console.log('🛑 Foreground tracking stopped');
+    }
+  }, []);
+
+  // بدء تتبع الخلفية
+  const startBackgroundTracking = useCallback(async () => {
+    if (!isOnline || !mountedRef.current) return;
+    if (backgroundTaskStarted.current) return;
+    if (Platform.OS !== 'android') return;
+    
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+    
+    try {
+      // التحقق من أن المهمة مسجلة
+      if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
+        console.error('Background task not defined');
+        return;
+      }
+      
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.High,
+        timeInterval: updateInterval,
+        distanceInterval: 10,
+        showsBackgroundLocationIndicator: true,
+        deferredUpdatesInterval: updateInterval,
+        deferredUpdatesDistance: 10,
+      });
+      
+      backgroundTaskStarted.current = true;
+      console.log('✅ Background tracking started');
+    } catch (err) {
+      console.error('Start background tracking error:', err?.message);
+      // لا نعرض الخطأ للمستخدم لأن هذا ليس حرجاً
+    }
+  }, [isOnline, requestPermissions, updateInterval]);
+
+  // إيقاف تتبع الخلفية
+  const stopBackgroundTracking = useCallback(async () => {
+    if (!backgroundTaskStarted.current) return;
+    
+    try {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      backgroundTaskStarted.current = false;
+      console.log('🛑 Background tracking stopped');
+    } catch (err) {
+      // تجاهل الخطأ - المهمة قد لا تكون موجودة
+      console.log('Stop background tracking ignored:', err?.message);
+    }
+  }, []);
+
+  // تحديث موقع فوري
+  const updateLocationOnce = useCallback(async () => {
+    if (!isOnline || !mountedRef.current) return null;
+    
+    try {
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) return null;
+      
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+      
+      const { latitude, longitude, speed, heading } = location.coords;
+      
+      setCurrentLocation({
+        latitude,
+        longitude,
+        speed,
+        heading,
+        timestamp: new Date()
+      });
+      
+      const result = await DriverService.updateLocation(latitude, longitude);
+      
+      if (result?.success && error) {
+        setError(null);
+      }
+      
+      return result;
+    } catch (err) {
+      console.log('Update location once error:', err?.message);
+      return null;
+    }
+  }, [isOnline, requestPermissions, error]);
+
+  // مراقبة حالة التطبيق
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      const wasBackground = appStateRef.current === 'background';
+      appStateRef.current = nextAppState;
+      const isNowBackground = nextAppState === 'background';
+      
+      setIsInBackground(isNowBackground);
+      
+      if (isNowBackground && !wasBackground) {
+        // انتقل إلى الخلفية
+        console.log('📱 App moved to background');
+        stopForegroundTracking();
+        await startBackgroundTracking();
+      } 
+      else if (!isNowBackground && wasBackground) {
+        // عاد إلى المقدمة
+        console.log('📱 App returned to foreground');
+        await stopBackgroundTracking();
+        startForegroundTracking();
+        await updateLocationOnce();
+      }
+    });
+    
+    return () => subscription.remove();
+  }, [startForegroundTracking, stopForegroundTracking, startBackgroundTracking, stopBackgroundTracking, updateLocationOnce]);
+
+  // بدء/إيقاف التتبع بناءً على حالة الاتصال
+  useEffect(() => {
+    const initTracking = async () => {
+      if (isOnline) {
+        if (!isInBackground) {
+          await startForegroundTracking();
+        } else {
+          await startBackgroundTracking();
+        }
+        setIsTracking(true);
+      } else {
+        await stopForegroundTracking();
+        await stopBackgroundTracking();
+        setIsTracking(false);
+      }
+    };
+    
+    initTracking();
+    
+    return () => {
+      stopForegroundTracking();
+      stopBackgroundTracking();
+    };
+  }, [isOnline, isInBackground, startForegroundTracking, stopForegroundTracking, startBackgroundTracking, stopBackgroundTracking]);
+
+  // تنظيف عند إلغاء تحميل المكون
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      stopForegroundTracking();
+      stopBackgroundTracking();
+    };
+  }, [stopForegroundTracking, stopBackgroundTracking]);
+
+  return {
+    currentLocation,
+    isTracking,
+    error,
+    isInBackground,
+    startForegroundTracking,
+    stopForegroundTracking,
+    startBackgroundTracking,
+    stopBackgroundTracking,
+    updateLocation: updateLocationOnce,
+  };
+};
+
+export default useLocation;
+</file>
+
+<file path="src/screens/main/OrdersScreen.js">
+// src/screens/main/OrdersScreen.js - النسخة النهائية النظيفة
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  Alert,
+  ActivityIndicator,
+  Modal,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import OrderCard from '../../components/orders/OrderCard';
+import Header from '../../components/common/Header';
+import DriverService from '../../api/driverService';
+import { connectSocket, onEvent, offEvent } from '../../api/socket';
+import useNotification from '../../hooks/useNotification';
+import useAuthStore from '../../store/authStore';
+import { colors } from '../../styles/colors';
+import { typography } from '../../styles/typography';
+import { globalStyles } from '../../styles/globalStyles';
+import OrderStatusBadge from '../../components/orders/OrderStatusBadge';
+
+export default function OrdersScreen() {
+  const navigation = useNavigation();
+  const { sendLocalNotification, updateBadgeCount } = useNotification();
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [activeOrder, setActiveOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
+  const [isToggling, setIsToggling] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusModalMessage, setStatusModalMessage] = useState('');
+  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  const { isOnline, toggleOnlineStatus, user } = useAuthStore();
+
+  const flatListRef = useRef(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const switchAnim = useRef(new Animated.Value(isOnline ? 1 : 0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  const canAcceptOrders = !activeOrder && isOnline;
+
+  useEffect(() => {
+    if (canAcceptOrders && availableOrders.length > 0) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      glowAnim.setValue(0);
+    }
+  }, [canAcceptOrders, availableOrders.length]);
+
+  const checkAccountStatus = async () => {
+    const status = await DriverService.checkAccountStatus();
+    setAccountStatus(status);
+    if (!status.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط. يرجى التواصل مع الدعم الفني.');
+    }
+  };
+
+  const updateDriverAvailability = useCallback(async () => {
+    if (!accountStatus.isActive) return;
+    const shouldBeAvailable = isOnline && !activeOrder;
+    await DriverService.toggleAvailability(shouldBeAvailable);
+  }, [isOnline, activeOrder, accountStatus.isActive]);
+
+  useEffect(() => {
+    updateDriverAvailability();
+  }, [activeOrder, isOnline, updateDriverAvailability]);
+
+  useEffect(() => {
+    const initDriver = async () => {
+      await checkAccountStatus();
+      await loadOrders();
+    };
+    initDriver();
+
+    if (isOnline) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isOnline]);
+
+  const loadOrders = useCallback(async () => {
+    try {
+      const availableResult = await DriverService.getAvailableOrders();
+      setAvailableOrders(availableResult.orders || []);
+      setNotificationCount(availableResult.orders?.length || 0);
+      await updateBadgeCount(availableResult.orders?.length || 0);
+
+      const activeOrderResult = await DriverService.getActiveOrder();
+      setActiveOrder(activeOrderResult);
+    } catch {
+      setActiveOrder(null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [updateBadgeCount]);
+
+
+
+
+  // أضف هذا داخل OrdersScreen component بعد تعريف loadOrders
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (isOnline && accountStatus.isActive) {
+        const shouldBeAvailable = isOnline && !activeOrder;
+        await DriverService.toggleAvailability(shouldBeAvailable);
+        console.log('🔄 Availability status updated:', shouldBeAvailable);
+      }
+    }, 10000); // ✅ كل 10 ثوانٍ
+
+    return () => clearInterval(interval);
+  }, [isOnline, activeOrder, accountStatus.isActive]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (accountStatus.isActive) {
+        loadOrders();
+      }
+    }, [loadOrders, accountStatus.isActive])
+  );
+
+  useEffect(() => {
+    const initSocket = async () => {
+      if (isOnline && accountStatus.isActive) {
+        await connectSocket();
+
+        onEvent('driver:new-order', () => {
+          loadOrders();
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        });
+
+        onEvent('driver:status:changed', () => loadOrders());
+
+        onEvent('order:status:updated', (data) => {
+          if (data.orderId === activeOrder?.id || data.orderId === activeOrder?._id) {
+            loadOrders();
+          }
+        });
+      }
+    };
+
+    initSocket();
+    return () => {
+      offEvent('driver:new-order');
+      offEvent('driver:status:changed');
+      offEvent('order:status:updated');
+    };
+  }, [isOnline, loadOrders, activeOrder, accountStatus.isActive]);
+
+  const onRefresh = useCallback(() => {
+    if (accountStatus.isActive) {
+      setRefreshing(true);
+      loadOrders();
+    }
+  }, [loadOrders, accountStatus.isActive]);
+
+  const handleAccept = async (orderId) => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+
+    setProcessingId(orderId);
+    try {
+      const result = await DriverService.acceptOrder(orderId);
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('نجاح', 'تم قبول الطلب بنجاح');
+        await loadOrders();
+        navigation.navigate('ActiveOrder', { orderId });
+      } else {
+        Alert.alert('خطأ', result.message || 'فشل قبول الطلب');
+      }
+    } catch {
+      Alert.alert('خطأ', 'حدث خطأ أثناء قبول الطلب');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (orderId) => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+
+    setProcessingId(orderId);
+    try {
+      const result = await DriverService.rejectOrder(orderId);
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setAvailableOrders(prev => prev.filter(order =>
+          (order.id !== orderId && order._id !== orderId)
+        ));
+        Alert.alert('تم', 'تم رفض الطلب');
+      } else {
+        Alert.alert('خطأ', result.message || 'فشل رفض الطلب');
+      }
+    } catch {
+      Alert.alert('خطأ', 'حدث خطأ أثناء رفض الطلب');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleToggleOnline = async () => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+    if (isToggling) return;
+
+    setIsToggling(true);
+    setShowStatusModal(true);
+    setStatusModalMessage(isOnline ? 'جاري قطع الاتصال...' : 'جاري الاتصال...');
+
+    const success = await toggleOnlineStatus();
+
+    if (success) {
+      Animated.spring(switchAnim, {
+        toValue: isOnline ? 0 : 1,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 7,
+      }).start();
+
+      setTimeout(async () => {
+        await loadOrders();
+        setShowStatusModal(false);
+      }, 500);
+    } else {
+      setShowStatusModal(false);
+    }
+    setIsToggling(false);
+  };
+
+  const goToActiveOrder = () => {
+    if (activeOrder) {
+      navigation.navigate('ActiveOrder', { order: activeOrder });
+    }
+  };
+
+  const StatusToggleButton = () => (
+    <TouchableOpacity
+      style={[
+        styles.statusToggleButton,
+        isOnline && accountStatus.isActive ? styles.statusToggleOnline : styles.statusToggleOffline,
+      ]}
+      onPress={handleToggleOnline}
+      disabled={isToggling || !accountStatus.isActive}
+      activeOpacity={0.7}
+    >
+      <Animated.View
+        style={[
+          styles.statusToggleInner,
+          {
+            transform: [{
+              translateX: switchAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 28],
+              }),
+            }],
+          },
+        ]}
+      />
+      <View style={styles.statusToggleTextContainer}>
+        <Animated.Text style={[
+          styles.statusToggleText,
+          {
+            opacity: switchAnim.interpolate({
+              inputRange: [0, 0.5, 1],
+              outputRange: [1, 0.5, 1],
+            }),
+          },
+        ]}>
+          {isOnline ? '🟢 متصل' : '🔴 غير متصل'}
+        </Animated.Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const ActiveOrderCard = () => {
+    if (!activeOrder) return null;
+    const orderId = activeOrder.id || activeOrder._id;
+    const displayOrderId = orderId?.slice(-8) || '00000000';
+
+    return (
+      <TouchableOpacity onPress={goToActiveOrder} activeOpacity={0.8}>
+        <View style={styles.activeOrderCard}>
+          <View style={styles.activeOrderHeader}>
+            <View style={styles.activeOrderBadge}>
+              <Ionicons name="bicycle" size={16} color={colors.surface} />
+              <Text style={styles.activeOrderBadgeText}>طلب نشط</Text>
+            </View>
+            <Text style={styles.activeOrderId}>#{displayOrderId}</Text>
+          </View>
+          <Text style={styles.activeOrderStore}>{activeOrder.store?.name || 'متجر'}</Text>
+          <View style={styles.activeOrderDetails}>
+            <Text style={styles.activeOrderPriceValue}>{activeOrder.totalPrice || 0} د.ع</Text>
+            <OrderStatusBadge status={activeOrder.status} size="small" />
+          </View>
+          <View style={styles.activeOrderButton}>
+            <Text style={styles.activeOrderButtonText}>تابع الطلب →</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderHeader = () => (
+    <View style={styles.headerSection}>
+      <View style={[styles.statusCard, (isOnline && accountStatus.isActive) && styles.statusCardOnline]}>
+        <View style={styles.statusInfo}>
+          <Animated.View style={[styles.statusDotContainer, { transform: [{ scale: pulseAnim }] }]}>
+            <View style={[styles.statusDot, (isOnline && accountStatus.isActive) && styles.onlineDot]} />
+          </Animated.View>
+          <View>
+            <Text style={styles.statusLabel}>حالة المندوب</Text>
+            <Text style={[styles.statusValue, (isOnline && accountStatus.isActive) ? styles.onlineText : styles.offlineText]}>
+              {!accountStatus.isActive ? 'الحساب غير نشط' : (isOnline ? 'متصل وجاهز' : 'غير متصل')}
+            </Text>
+          </View>
+        </View>
+        <StatusToggleButton />
+      </View>
+
+      <Animated.View style={[
+        styles.availabilityCard,
+        canAcceptOrders ? styles.availabilityCardActive : styles.availabilityCardInactive,
+        canAcceptOrders && availableOrders.length > 0 && {
+          shadowColor: colors.primary,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: glowAnim,
+          shadowRadius: 10,
+          elevation: glowAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 8],
+          }),
+        },
+      ]}>
+        <Ionicons
+          name={canAcceptOrders ? "checkmark-circle" : "close-circle"}
+          size={28}
+          color={canAcceptOrders ? colors.success : colors.danger}
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.availabilityLabel}>حالة استقبال الطلبات</Text>
+          <Text style={[styles.availabilityValue, canAcceptOrders ? styles.availabilityActive : styles.availabilityInactive]}>
+            {!isOnline ? 'غير متاح (غير متصل)' :
+              (activeOrder ? 'غير متاح (لديك طلب جاري)' : 'متاح ✅')}
+          </Text>
+        </View>
+        {canAcceptOrders && availableOrders.length > 0 && (
+          <View style={styles.newOrdersBadge}>
+            <Text style={styles.newOrdersBadgeText}>{availableOrders.length}</Text>
+          </View>
+        )}
+      </Animated.View>
+
+      <View style={styles.driverCard}>
+        <View style={[styles.driverAvatar, (isOnline && accountStatus.isActive) && styles.driverAvatarOnline]}>
+          <Text style={styles.driverAvatarText}>{user?.name?.charAt(0) || 'م'}</Text>
+          {(isOnline && accountStatus.isActive) && (
+            <View style={styles.onlineBadge}>
+              <Ionicons name="checkmark" size={10} color={colors.surface} />
+            </View>
+          )}
+        </View>
+        <View style={styles.driverInfo}>
+          <Text style={styles.driverName}>{user?.name || 'مندوب'}</Text>
+          <Text style={styles.driverPhone}>{user?.phone}</Text>
+        </View>
+        <View style={styles.statsBadge}>
+          <Text style={styles.statsNumber}>{availableOrders.length}</Text>
+          <Text style={styles.statsLabel}>طلب جديد</Text>
+        </View>
+      </View>
+
+      <ActiveOrderCard />
+
+      {(canAcceptOrders && availableOrders.length > 0 && !activeOrder) && (
+        <View style={styles.ordersInfoCard}>
+          <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
+          <Text style={styles.ordersInfoText}>{availableOrders.length} طلب جديد في انتظارك</Text>
+          <TouchableOpacity onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}>
+            <Ionicons name="arrow-down" size={20} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderItem = ({ item }) => (
+    <OrderCard
+      order={{ ...item, id: item._id }}
+      onAccept={() => handleAccept(item._id)}
+      onReject={() => handleReject(item._id)}
+      isProcessing={processingId === item._id}
+    />
+  );
+
+  if (loading && availableOrders.length === 0 && !activeOrder) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
+        <Header title="الطلبات" showNotification notificationCount={notificationCount} />
+        <View style={styles.initialLoadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.initialLoadingText}>جاري تحميل الطلبات...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
+      <Header title="الطلبات" showNotification notificationCount={notificationCount} />
+
+      <Modal transparent visible={showStatusModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.modalText}>{statusModalMessage}</Text>
+          </View>
+        </View>
+      </Modal>
+
+      <FlatList
+        ref={flatListRef}
+        data={availableOrders}
+        keyExtractor={(item) => item._id || item.id || Math.random().toString()}
+        ListHeaderComponent={renderHeader}
+        renderItem={renderItem}
+        ListEmptyComponent={!activeOrder ? EmptyStateComponent : null}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+            enabled={accountStatus.isActive}
+          />
+        }
+        contentContainerStyle={[
+          styles.listContent,
+          availableOrders.length === 0 && !activeOrder && styles.emptyListContent
+        ]}
+        showsVerticalScrollIndicator={false}
+      />
+    </SafeAreaView>
+  );
+}
+
+const EmptyStateComponent = () => (
+  <View style={styles.emptyContainer}>
+    <View style={styles.emptyIconContainer}>
+      <Ionicons name="bicycle-outline" size={64} color={colors.textDisabled} />
+    </View>
+    <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
+    <Text style={styles.emptySubtext}>عند توفر طلبات جديدة، ستظهر هنا تلقائياً</Text>
+  </View>
+);
+
+const styles = StyleSheet.create({
+  listContent: { padding: 16 },
+  emptyListContent: { flex: 1, justifyContent: 'center' },
+  headerSection: { marginBottom: 16 },
+
+  statusCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statusCardOnline: { borderColor: colors.primaryLight },
+  statusInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  statusDotContainer: { width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  statusDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.offline },
+  onlineDot: { backgroundColor: colors.success, shadowColor: colors.success, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 6, elevation: 3 },
+  statusLabel: { fontSize: typography.caption, color: colors.textSecondary },
+  statusValue: { fontSize: typography.body2, fontWeight: typography.bold },
+  onlineText: { color: colors.success },
+  offlineText: { color: colors.danger },
+
+  statusToggleButton: {
+    width: 110,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statusToggleOnline: { backgroundColor: colors.success },
+  statusToggleOffline: { backgroundColor: colors.danger },
+  statusToggleInner: {
+    position: 'absolute',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  statusToggleTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  statusToggleText: { fontSize: typography.body2, fontWeight: typography.bold, color: colors.surface },
+
+  availabilityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  availabilityCardActive: { backgroundColor: colors.success + '10', borderWidth: 1, borderColor: colors.success },
+  availabilityCardInactive: { backgroundColor: colors.danger + '10', borderWidth: 1, borderColor: colors.danger },
+  availabilityLabel: { fontSize: typography.caption, color: colors.textSecondary },
+  availabilityValue: { fontSize: typography.body2, fontWeight: typography.bold },
+  availabilityActive: { color: colors.success },
+  availabilityInactive: { color: colors.danger },
+  newOrdersBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minWidth: 28,
+    alignItems: 'center',
+  },
+  newOrdersBadgeText: {
+    fontSize: typography.caption,
+    fontWeight: typography.bold,
+    color: colors.surface,
+  },
+
+  driverCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 20, padding: 16, marginBottom: 12, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  driverAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: 12, position: 'relative' },
+  driverAvatarOnline: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  driverAvatarText: { fontSize: typography.h4, fontWeight: typography.bold, color: colors.primary },
+  driverAvatarOnlineText: { color: colors.surface },
+  onlineBadge: { position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.success, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.surface },
+  driverInfo: { flex: 1 },
+  driverName: { fontSize: typography.body1, fontWeight: typography.bold, color: colors.text },
+  driverPhone: { fontSize: typography.caption, color: colors.textSecondary, marginTop: 2 },
+  statsBadge: { backgroundColor: colors.surfaceVariant, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24, alignItems: 'center', minWidth: 70 },
+  statsNumber: { fontSize: typography.h5, fontWeight: typography.bold, color: colors.primary },
+  statsLabel: { fontSize: typography.caption, color: colors.primary },
+
+  activeOrderCard: { backgroundColor: colors.primaryLight + '10', borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.primaryLight },
+  activeOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  activeOrderBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, gap: 6 },
+  activeOrderBadgeText: { fontSize: typography.caption, fontWeight: typography.bold, color: colors.surface },
+  activeOrderId: { fontSize: typography.caption, color: colors.textSecondary },
+  activeOrderStore: { fontSize: typography.body1, fontWeight: typography.bold, color: colors.text, marginBottom: 8 },
+  activeOrderDetails: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  activeOrderPriceValue: { fontSize: typography.h6, fontWeight: typography.bold, color: colors.success },
+  activeOrderButton: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.divider, alignItems: 'flex-end' },
+  activeOrderButtonText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium },
+
+  ordersInfoCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.primaryLight + '10', borderWidth: 1, borderColor: colors.primaryLight, padding: 14, borderRadius: 16, marginBottom: 12 },
+  ordersInfoText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium, flex: 1 },
+
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 60 },
+  emptyIconContainer: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.surfaceVariant, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  emptyTitle: { fontSize: 20, fontWeight: typography.bold, color: colors.textDisabled, marginBottom: 8 },
+  emptySubtext: { fontSize: typography.body2, color: colors.textSecondary, textAlign: 'center', marginTop: 8 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: colors.surface, borderRadius: 24, padding: 32, alignItems: 'center', minWidth: 200, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+  modalText: { fontSize: typography.body1, color: colors.text, marginTop: 16, textAlign: 'center' },
+
+  initialLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  initialLoadingText: { fontSize: typography.body1, color: colors.textSecondary, marginTop: 16 },
+});
+</file>
+
 <file path="eas.json">
 {
   "cli": {
@@ -7564,7 +7837,11 @@ const styles = StyleSheet.create({
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      },
+      "ios": {
+        "buildConfiguration": "Debug"
       },
       "env": {
         "NODE_ENV": "development"
@@ -7575,14 +7852,21 @@ const styles = StyleSheet.create({
       "android": {
         "buildType": "apk"
       },
+      "ios": {
+        "simulator": true
+      },
       "env": {
-        "NODE_ENV": "production"
+        "NODE_ENV": "staging"
       }
     },
     "production": {
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "gradleCommand": ":app:bundleRelease"
+      },
+      "ios": {
+        "buildConfiguration": "Release"
       },
       "env": {
         "NODE_ENV": "production"
@@ -7590,7 +7874,17 @@ const styles = StyleSheet.create({
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "production",
+        "releaseStatus": "completed"
+      },
+      "ios": {
+        "appleId": "your-apple-id@example.com",
+        "ascAppId": "your-app-id",
+        "sku": "com.yourcompany.driverapp"
+      }
+    }
   }
 }
 </file>
@@ -7626,11 +7920,13 @@ const styles = StyleSheet.create({
       },
       "package": "com.yourcompany.driverapp",
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "WAKE_LOCK",
-        "RECEIVE_BOOT_COMPLETED"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ]
     },
     "web": {
@@ -7640,23 +7936,31 @@ const styles = StyleSheet.create({
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك حتى في الخلفية لتوصيل الطلبات"
+          "locationAlwaysAndWhenInUsePermission": "نحتاج موقعك لتوصيل الطلبات - سيتم تحديث موقعك كل 10 ثوانٍ",
+          "locationAlwaysPermission": "نحتاج موقعك في الخلفية لتحديث حالة التوصيل",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "androidForegroundService": {
+            "notificationTitle": "توصيل سريع",
+            "notificationBody": "يتم تحديث موقعك لتوصيل الطلبات",
+            "notificationColor": "#f64008"
+          }
         }
       ],
       [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#ffffff"
+          "color": "#f64008"
         }
       ],
       [
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 36,
-            "targetSdkVersion": 36,
-            "buildToolsVersion": "36.0.0",
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
             "minSdkVersion": 24
           },
           "ios": {
