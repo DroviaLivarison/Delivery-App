@@ -114,43 +114,38 @@ class LocationService {
   }
 
   // ✅ بدء تتبع الموقع في الخلفية
-  async startBackgroundTracking() {
-    if (this.isBackgroundTracking) {
-      console.log('⚠️ Background tracking already started');
-      return true;
-    }
-    
-    try {
-      // التحقق من أن المهمة مسجلة
-      const isRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
-      if (!isRegistered) {
-        console.log('📝 Registering background location task...');
-      }
-      
-      // بدء تحديثات الموقع في الخلفية
-      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 10000, // 10 ثواني
-        distanceInterval: 30, // 30 متر
-        showsBackgroundLocationIndicator: true,
-        activityType: Location.ActivityType.OtherNavigation,
-        pausesUpdatesAutomatically: false,
-        foregroundService: {
-          notificationTitle: '🚚 تطبيق المندوب',
-          notificationBody: 'يعمل في الخلفية لتحديث موقعك وتوصيل الطلبات',
-          notificationColor: colors.primary,
-          sticky: true,
-        },
-      });
-      
-      this.isBackgroundTracking = true;
-      console.log('✅ Background location tracking started');
-      return true;
-    } catch (error) {
-      console.error('❌ Start background tracking error:', error);
-      return false;
-    }
+
+
+async startBackgroundTracking() {
+  if (this.isBackgroundTracking) {
+    console.log('⚠️ Background tracking already started');
+    return true;
   }
+  
+  try {
+    // استخدام تحديث الموقع في الخلفية بدون خدمة أمامية
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+      accuracy: Location.Accuracy.High,
+      timeInterval: 10000,
+      distanceInterval: 30,
+      showsBackgroundLocationIndicator: true,
+      activityType: Location.ActivityType.OtherNavigation,
+      pausesUpdatesAutomatically: false,
+      deferredUpdatesInterval: 10000,
+      deferredUpdatesDistance: 50,
+      // ✅ لا تستخدم foregroundService
+    });
+    
+    this.isBackgroundTracking = true;
+    console.log('✅ Background location tracking started');
+    return true;
+  } catch (error) {
+    console.error('❌ Start background tracking error:', error);
+    return false;
+  }
+}
+
+
 
   // ✅ إيقاف تتبع الموقع في الخلفية
   async stopBackgroundTracking() {

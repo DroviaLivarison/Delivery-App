@@ -18,7 +18,7 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "نحتاج إلى موقعك لتوصيل الطلبات وإظهار طريقك",
         "NSLocationAlwaysUsageDescription": "نحتاج إلى موقعك في الخلفية لتحديث حالة التوصيل حتى عندما يكون التطبيق مغلقاً",
-        "UIBackgroundModes": ["location", "fetch", "processing"]
+        "UIBackgroundModes": ["location", "fetch"]
       }
     },
     "android": {
@@ -31,21 +31,9 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION",
         "WAKE_LOCK",
-        "RECEIVE_BOOT_COMPLETED",
-        "SCHEDULE_EXACT_ALARM"
-      ],
-      "foregroundService": {
-        "location": [
-          {
-            "notificationTitle": "🚚 خدمة التوصيل",
-            "notificationBody": "التطبيق يعمل في الخلفية لتحديث موقعك وتوصيل الطلبات",
-            "notificationColor": "#f64008"
-          }
-        ]
-      }
+        "RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -68,19 +56,14 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0"
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "buildToolsVersion": "36.0.0",
+            "minSdkVersion": 24
           },
           "ios": {
             "deploymentTarget": "15.1"
           }
-        }
-      ],
-      [
-        "expo-background-fetch",
-        {
-          "minimumInterval": 60
         }
       ]
     ],
