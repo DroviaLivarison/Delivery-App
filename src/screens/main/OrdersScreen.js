@@ -1,3 +1,5 @@
+// src/screens/main/OrdersScreen.js - النسخة النهائية (زر واحد فقط)
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -7,12 +9,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Dimensions,
   Alert,
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -27,8 +28,6 @@ import { typography } from '../../styles/typography';
 import { globalStyles } from '../../styles/globalStyles';
 import OrderStatusBadge from '../../components/orders/OrderStatusBadge';
 
-const { width, height } = Dimensions.get('window');
-
 export default function OrdersScreen() {
   const navigation = useNavigation();
   const [availableOrders, setAvailableOrders] = useState([]);
@@ -39,15 +38,60 @@ export default function OrdersScreen() {
   const [isToggling, setIsToggling] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusModalMessage, setStatusModalMessage] = useState('');
-  const [flatListKey, setFlatListKey] = useState(0);
+  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
+  
+  // ✅ من useAuthStore - نأخذ isOnline فقط (زر الاتصال)
   const { isOnline, toggleOnlineStatus, user } = useAuthStore();
-  const insets = useSafeAreaInsets();
+  
   const flatListRef = useRef(null);
-
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const switchAnim = useRef(new Animated.Value(isOnline ? 1 : 0)).current;
 
+  // ✅ حالة استقبال الطلبات (تتغير تلقائياً حسب وجود طلب جاري)
+  const canAcceptOrders = !activeOrder && isOnline;
+
+  // ✅ التحقق من حالة الحساب
+  const checkAccountStatus = async () => {
+    const status = await DriverService.checkAccountStatus();
+    setAccountStatus(status);
+
+    if (!status.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط. يرجى التواصل مع الدعم الفني.');
+    }
+  };
+
+  // ✅ تحديث حالة التوفر في الباك اند بناءً على وجود طلب جاري
+  const updateDriverAvailability = useCallback(async () => {
+    if (!accountStatus.isActive) return;
+    
+    // إذا كان متصلاً وليس لديه طلب جاري → متاح
+    // إذا كان متصلاً ولديه طلب جاري → غير متاح
+    // إذا كان غير متصل → غير متاح
+    const shouldBeAvailable = isOnline && !activeOrder;
+    
+    console.log('🔄 Updating driver availability:', {
+      isOnline,
+      hasActiveOrder: !!activeOrder,
+      shouldBeAvailable
+    });
+    
+    // ✅ تحديث حالة التوفر في الباك اند
+    await DriverService.toggleAvailability(shouldBeAvailable);
+  }, [isOnline, activeOrder, accountStatus.isActive]);
+
+  // ✅ عندما يتغير activeOrder أو isOnline، نحدث حالة التوفر
   useEffect(() => {
+    updateDriverAvailability();
+  }, [activeOrder, isOnline, updateDriverAvailability]);
+
+  useEffect(() => {
+    const initDriver = async () => {
+      await checkAccountStatus();
+      await loadOrders();
+    };
+
+    initDriver();
+
     if (isOnline) {
       Animated.loop(
         Animated.sequence([
@@ -68,34 +112,21 @@ export default function OrdersScreen() {
     }
   }, [isOnline]);
 
-  useEffect(() => {
-    setFlatListKey(prev => prev + 1);
-  }, [isOnline]);
-
   const loadOrders = useCallback(async () => {
     try {
       // 1. جلب الطلبات المتاحة
       const availableResult = await DriverService.getAvailableOrders();
       setAvailableOrders(availableResult.orders || []);
-      
+
       // 2. جلب الطلب النشط للمندوب
       try {
         const activeOrderResult = await DriverService.getActiveOrder();
         setActiveOrder(activeOrderResult);
-        
-        // ✅ إذا كان هناك طلب نشط ولم نكن في صفحة الطلب الحالي، ننتقل إليه
-        if (activeOrderResult) {
-          const currentRoute = navigation.getState()?.routes[navigation.getState().index]?.name;
-          if (currentRoute !== 'ActiveOrder') {
-            // نعرض إشعار بأن هناك طلب نشط
-            console.log('📢 Active order exists:', activeOrderResult.id);
-          }
-        }
       } catch (activeError) {
-        console.log('No active order or error fetching:', activeError?.message);
+        console.log('No active order:', activeError?.message);
         setActiveOrder(null);
       }
-      
+
     } catch (error) {
       console.error('Load orders error:', error);
       setAvailableOrders([]);
@@ -104,38 +135,30 @@ export default function OrdersScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [navigation]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadOrders();
-    }, [loadOrders])
+      if (accountStatus.isActive) {
+        loadOrders();
+      }
+    }, [loadOrders, accountStatus.isActive])
   );
 
   useEffect(() => {
     const initSocket = async () => {
-      if (isOnline) {
+      if (isOnline && accountStatus.isActive) {
         await connectSocket();
-        
+
         onEvent('driver:new-order', (data) => {
           loadOrders();
-          
-          const storeName = data?.storeName || data?.store?.name || 'متجر';
-          sendLocalNotification(
-            'طلب جديد',
-            `لديك طلب جديد من ${storeName}`,
-            { orderId: data?.orderId || data?._id }
-          );
+          sendLocalNotification('طلب جديد', `لديك طلب جديد`, { orderId: data?.orderId });
         });
-        
-        onEvent('driver:status:changed', (data) => {
+
+        onEvent('driver:status:changed', () => {
           loadOrders();
         });
-        
-        onEvent('driver:available:orders:refresh', () => {
-          loadOrders();
-        });
-        
+
         onEvent('order:status:updated', (data) => {
           if (data.orderId === activeOrder?.id || data.orderId === activeOrder?._id) {
             loadOrders();
@@ -143,45 +166,37 @@ export default function OrdersScreen() {
         });
       }
     };
-    
+
     initSocket();
-    
     return () => {
       offEvent('driver:new-order');
       offEvent('driver:status:changed');
-      offEvent('driver:available:orders:refresh');
       offEvent('order:status:updated');
     };
-  }, [isOnline, loadOrders, activeOrder]);
+  }, [isOnline, loadOrders, activeOrder, accountStatus.isActive]);
 
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadOrders();
-  }, [loadOrders]);
+    if (accountStatus.isActive) {
+      setRefreshing(true);
+      loadOrders();
+    }
+  }, [loadOrders, accountStatus.isActive]);
 
   const handleAccept = async (orderId) => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+
     setProcessingId(orderId);
     try {
       const result = await DriverService.acceptOrder(orderId);
-      
+
       if (result.success) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
-        const acceptedOrderData = availableOrders.find(order => 
-          (order.id === orderId || order._id === orderId)
-        );
-        
         Alert.alert('نجاح', 'تم قبول الطلب بنجاح');
-        
-        // ✅ إعادة تحميل الطلبات
         await loadOrders();
-        
-        // ✅ التنقل إلى صفحة الطلب الحالي
-        if (acceptedOrderData) {
-          navigation.navigate('ActiveOrder', { 
-            order: acceptedOrderData 
-          });
-        }
+        navigation.navigate('ActiveOrder', { orderId });
       } else {
         Alert.alert('خطأ', result.message || 'فشل قبول الطلب');
       }
@@ -194,13 +209,18 @@ export default function OrdersScreen() {
   };
 
   const handleReject = async (orderId) => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+
     setProcessingId(orderId);
     try {
       const result = await DriverService.rejectOrder(orderId);
-      
+
       if (result.success) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setAvailableOrders(prev => prev.filter(order => 
+        setAvailableOrders(prev => prev.filter(order =>
           (order.id !== orderId && order._id !== orderId)
         ));
         Alert.alert('تم', 'تم رفض الطلب');
@@ -215,17 +235,19 @@ export default function OrdersScreen() {
     }
   };
 
+  // ✅ تبديل حالة الاتصال فقط (الزر الرئيسي الوحيد)
   const handleToggleOnline = async () => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+    
     if (isToggling) return;
     
     setIsToggling(true);
     setShowStatusModal(true);
-    setStatusModalMessage(isOnline ? 'جاري إيقاف الاستقبال...' : 'جاري تفعيل الاستقبال...');
+    setStatusModalMessage(isOnline ? 'جاري قطع الاتصال...' : 'جاري الاتصال...');
     
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (error) {}
-
     const success = await toggleOnlineStatus();
     
     if (success) {
@@ -239,7 +261,7 @@ export default function OrdersScreen() {
       setTimeout(async () => {
         await loadOrders();
         setShowStatusModal(false);
-      }, 800);
+      }, 500);
     } else {
       setShowStatusModal(false);
     }
@@ -253,29 +275,13 @@ export default function OrdersScreen() {
     }
   };
 
-  const StatusChangeModal = () => (
-    <Modal
-      transparent
-      visible={showStatusModal}
-      animationType="fade"
-      onRequestClose={() => setShowStatusModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.modalText}>{statusModalMessage}</Text>
-        </View>
-      </View>
-    </Modal>
-  );
-
   // ✅ عرض الطلب النشط
   const ActiveOrderCard = () => {
     if (!activeOrder) return null;
-    
+
     const orderId = activeOrder.id || activeOrder._id;
     const displayOrderId = orderId?.slice(-8) || '00000000';
-    
+
     return (
       <TouchableOpacity onPress={goToActiveOrder} activeOpacity={0.8}>
         <Card style={styles.activeOrderCard}>
@@ -286,18 +292,11 @@ export default function OrdersScreen() {
             </View>
             <Text style={styles.activeOrderId}>#{displayOrderId}</Text>
           </View>
-          
           <Text style={styles.activeOrderStore}>{activeOrder.store?.name || 'متجر'}</Text>
-          
           <View style={styles.activeOrderDetails}>
-            <View style={styles.activeOrderPrice}>
-              <Text style={styles.activeOrderPriceValue}>{activeOrder.totalPrice || 0} د.ع</Text>
-            </View>
-            <View style={styles.activeOrderStatus}>
-              <OrderStatusBadge status={activeOrder.status} size="small" />
-            </View>
+            <Text style={styles.activeOrderPriceValue}>{activeOrder.totalPrice || 0} د.ع</Text>
+            <OrderStatusBadge status={activeOrder.status} size="small" />
           </View>
-          
           <View style={styles.activeOrderButton}>
             <Text style={styles.activeOrderButtonText}>تابع الطلب →</Text>
           </View>
@@ -306,54 +305,14 @@ export default function OrdersScreen() {
     );
   };
 
-  const EmptyStateComponent = () => (
-    <View style={styles.emptyContainer}>
-      <Animated.View
-        style={[
-          styles.emptyContent,
-          {
-            opacity: pulseAnim.interpolate({
-              inputRange: [1, 1.2],
-              outputRange: [1, 0.8],
-            }),
-          }
-        ]}
-      >
-        <Ionicons
-          name={isOnline ? "bicycle" : "fast-food-outline"}
-          size={80}
-          color={isOnline ? colors.primary : colors.textDisabled}
-        />
-        <Text style={[styles.emptyTitle, isOnline ? styles.emptyTitleOnline : styles.emptyTitleOffline]}>
-          {isOnline ? '✨ جاهز للاستلام ✨' : '⚠️ غير متصل'}
-        </Text>
-        <Text style={styles.emptySubtext}>
-          {isOnline
-            ? 'الطلبات الجديدة ستظهر هنا تلقائياً'
-            : 'فعّل حالة الاستقبال لتبدأ باستلام الطلبات'}
-        </Text>
-        {!isOnline && (
-          <TouchableOpacity
-            style={styles.enableButton}
-            onPress={handleToggleOnline}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="power" size={20} color={colors.surface} />
-            <Text style={styles.enableButtonText}>تفعيل الاستقبال</Text>
-          </TouchableOpacity>
-        )}
-      </Animated.View>
-    </View>
-  );
-
   const StatusToggleButton = () => (
     <TouchableOpacity
       style={[
         styles.statusToggleButton,
-        isOnline ? styles.statusToggleOnline : styles.statusToggleOffline,
+        isOnline && accountStatus.isActive ? styles.statusToggleOnline : styles.statusToggleOffline,
       ]}
       onPress={handleToggleOnline}
-      disabled={isToggling}
+      disabled={isToggling || !accountStatus.isActive}
       activeOpacity={0.7}
     >
       <Animated.View
@@ -369,51 +328,53 @@ export default function OrdersScreen() {
           },
         ]}
       />
-      <View style={styles.statusToggleIcons}>
-        <Ionicons
-          name="checkmark-circle"
-          size={18}
-          color={isOnline ? colors.surface : colors.textDisabled}
-          style={styles.statusToggleIconLeft}
-        />
-        <Ionicons
-          name="close-circle"
-          size={18}
-          color={!isOnline ? colors.surface : colors.textDisabled}
-          style={styles.statusToggleIconRight}
-        />
+      <View style={styles.statusToggleTextContainer}>
+        <Text style={styles.statusToggleText}>
+          {isOnline ? '🟢 متصل' : '🔴 غير متصل'}
+        </Text>
       </View>
     </TouchableOpacity>
   );
 
   const renderHeader = () => (
     <View style={styles.headerSection}>
-      <View style={[styles.statusCard, isOnline && styles.statusCardOnline]}>
+      {/* بطاقة حالة الاتصال */}
+      <View style={[styles.statusCard, (isOnline && accountStatus.isActive) && styles.statusCardOnline]}>
         <View style={styles.statusInfo}>
-          <Animated.View
-            style={[
-              styles.statusDotContainer,
-              {
-                transform: [{ scale: pulseAnim }],
-              },
-            ]}
-          >
-            <View style={[styles.statusDot, isOnline && styles.onlineDot]} />
+          <Animated.View style={[styles.statusDotContainer, { transform: [{ scale: pulseAnim }] }]}>
+            <View style={[styles.statusDot, (isOnline && accountStatus.isActive) && styles.onlineDot]} />
           </Animated.View>
           <View>
-            <Text style={styles.statusLabel}>حالة الاستقبال</Text>
-            <Text style={[styles.statusValue, isOnline ? styles.onlineText : styles.offlineText]}>
-              {isOnline ? 'متصل · جاهز للطلبات' : 'غير متصل · غير متاح'}
+            <Text style={styles.statusLabel}>حالة المندوب</Text>
+            <Text style={[styles.statusValue, (isOnline && accountStatus.isActive) ? styles.onlineText : styles.offlineText]}>
+              {!accountStatus.isActive ? 'الحساب غير نشط' : (isOnline ? 'متصل وجاهز' : 'غير متصل')}
             </Text>
           </View>
         </View>
         <StatusToggleButton />
       </View>
 
+      {/* ✅ بطاقة حالة استقبال الطلبات (للإعلام فقط) */}
+      <View style={[styles.availabilityCard, canAcceptOrders ? styles.availabilityCardActive : styles.availabilityCardInactive]}>
+        <Ionicons 
+          name={canAcceptOrders ? "checkmark-circle" : "close-circle"} 
+          size={24} 
+          color={canAcceptOrders ? colors.success : colors.danger} 
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.availabilityLabel}>حالة استقبال الطلبات</Text>
+          <Text style={[styles.availabilityValue, canAcceptOrders ? styles.availabilityActive : styles.availabilityInactive]}>
+            {!isOnline ? 'غير متاح (غير متصل)' : 
+             (activeOrder ? 'غير متاح (لديك طلب جاري)' : 'متاح ✅')}
+          </Text>
+        </View>
+      </View>
+
+      {/* بطاقة المندوب */}
       <View style={styles.driverCard}>
-        <View style={[styles.driverAvatar, isOnline && styles.driverAvatarOnline]}>
+        <View style={[styles.driverAvatar, (isOnline && accountStatus.isActive) && styles.driverAvatarOnline]}>
           <Text style={styles.driverAvatarText}>{user?.name?.charAt(0) || 'م'}</Text>
-          {isOnline && (
+          {(isOnline && accountStatus.isActive) && (
             <View style={styles.onlineBadge}>
               <Ionicons name="checkmark" size={10} color={colors.surface} />
             </View>
@@ -423,44 +384,35 @@ export default function OrdersScreen() {
           <Text style={styles.driverName}>{user?.name || 'مندوب'}</Text>
           <Text style={styles.driverPhone}>{user?.phone}</Text>
         </View>
-        <View style={[styles.statsBadge, isOnline && styles.statsBadgeOnline]}>
+        <View style={styles.statsBadge}>
           <Text style={styles.statsNumber}>{availableOrders.length}</Text>
           <Text style={styles.statsLabel}>طلب جديد</Text>
         </View>
       </View>
 
-      {/* ✅ عرض الطلب النشط إن وجد */}
+      {/* الطلب النشط */}
       <ActiveOrderCard />
 
-      {isOnline && availableOrders.length > 0 && !activeOrder && (
+      {/* إشعار الطلبات المتاحة */}
+      {(canAcceptOrders && availableOrders.length > 0 && !activeOrder) && (
         <View style={styles.ordersInfoCard}>
           <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
           <Text style={styles.ordersInfoText}>
-            {availableOrders.length} {availableOrders.length === 1 ? 'طلب جديد' : 'طلبات جديدة'} في انتظارك
+            {availableOrders.length} طلب جديد في انتظارك
           </Text>
         </View>
       )}
     </View>
   );
 
-  const renderItem = ({ item }) => {
-    const orderId = item._id || item.id;
-
-    const orderForCard = {
-      ...item,
-      id: orderId,
-      _id: orderId,
-    };
-
-    return (
-      <OrderCard
-        order={orderForCard}
-        onAccept={() => handleAccept(orderId)}
-        onReject={() => handleReject(orderId)}
-        isProcessing={processingId === orderId}
-      />
-    );
-  };
+  const renderItem = ({ item }) => (
+    <OrderCard
+      order={{ ...item, id: item._id }}
+      onAccept={() => handleAccept(item._id)}
+      onReject={() => handleReject(item._id)}
+      isProcessing={processingId === item._id}
+    />
+  );
 
   if (loading && availableOrders.length === 0 && !activeOrder) {
     return (
@@ -478,13 +430,20 @@ export default function OrdersScreen() {
     <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
       <Header title="الطلبات" showNotification />
       
-      <StatusChangeModal />
-
+      {/* مودال التحميل */}
+      <Modal transparent visible={showStatusModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.modalText}>{statusModalMessage}</Text>
+          </View>
+        </View>
+      </Modal>
+      
       <FlatList
-        key={flatListKey}
         ref={flatListRef}
         data={availableOrders}
-        keyExtractor={(item) => (item._id || item.id || Math.random().toString())}
+        keyExtractor={(item) => item._id || item.id || Math.random().toString()}
         ListHeaderComponent={renderHeader}
         renderItem={renderItem}
         ListEmptyComponent={!activeOrder ? EmptyStateComponent : null}
@@ -494,7 +453,7 @@ export default function OrdersScreen() {
             onRefresh={onRefresh}
             colors={[colors.primary]}
             tintColor={colors.primary}
-            enabled={isOnline}
+            enabled={accountStatus.isActive}
           />
         }
         contentContainerStyle={[
@@ -507,6 +466,15 @@ export default function OrdersScreen() {
   );
 }
 
+// ✅ حالة فارغة
+const EmptyStateComponent = () => (
+  <View style={styles.emptyContainer}>
+    <Ionicons name="bicycle-outline" size={80} color={colors.textDisabled} />
+    <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
+    <Text style={styles.emptySubtext}>عند توفر طلبات جديدة، ستظهر هنا تلقائياً</Text>
+  </View>
+);
+
 const Card = ({ children, style, onPress }) => {
   const Content = onPress ? TouchableOpacity : View;
   return (
@@ -517,16 +485,9 @@ const Card = ({ children, style, onPress }) => {
 };
 
 const styles = StyleSheet.create({
-  listContent: {
-    padding: 16,
-  },
-  emptyListContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  headerSection: {
-    marginBottom: 16,
-  },
+  listContent: { padding: 16 },
+  emptyListContent: { flex: 1, justifyContent: 'center' },
+  headerSection: { marginBottom: 16 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 16,
@@ -538,6 +499,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  
+  // بطاقة حالة الاتصال
   statusCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -546,327 +509,93 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.divider,
   },
-  statusCardOnline: {
-    borderColor: colors.primaryLight,
-    backgroundColor: colors.surface,
-  },
-  statusInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  statusDotContainer: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.offline,
-  },
-  onlineDot: {
-    backgroundColor: colors.success,
-    shadowColor: colors.success,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statusLabel: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  statusValue: {
-    fontSize: typography.body2,
-    fontWeight: typography.bold,
-  },
-  onlineText: {
-    color: colors.success,
-  },
-  offlineText: {
-    color: colors.danger,
-  },
+  statusCardOnline: { borderColor: colors.primaryLight },
+  statusInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  statusDotContainer: { width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  statusDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.offline },
+  onlineDot: { backgroundColor: colors.success, shadowColor: colors.success, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 4, elevation: 2 },
+  statusLabel: { fontSize: typography.caption, color: colors.textSecondary },
+  statusValue: { fontSize: typography.body2, fontWeight: typography.bold },
+  onlineText: { color: colors.success },
+  offlineText: { color: colors.danger },
+  
+  // زر التبديل
   statusToggleButton: {
-    width: 60,
-    height: 30,
-    borderRadius: 15,
+    width: 100,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    alignItems: 'center',
     overflow: 'hidden',
   },
-  statusToggleOnline: {
-    backgroundColor: colors.success,
-  },
-  statusToggleOffline: {
-    backgroundColor: colors.danger,
-  },
+  statusToggleOnline: { backgroundColor: colors.success },
+  statusToggleOffline: { backgroundColor: colors.danger },
   statusToggleInner: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
     position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 2,
   },
-  statusToggleIcons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flex: 1,
-    paddingHorizontal: 4,
-  },
-  statusToggleIconLeft: {
-    opacity: 0.8,
-  },
-  statusToggleIconRight: {
-    opacity: 0.8,
-  },
-  driverCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
-    marginBottom: 12,
-  },
-  driverAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    position: 'relative',
-  },
-  driverAvatarOnline: {
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  driverAvatarText: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
-    color: colors.primary,
-  },
-  onlineBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.success,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.surface,
-  },
-  driverInfo: {
-    flex: 1,
-  },
-  driverName: {
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-    color: colors.text,
-  },
-  driverPhone: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  statsBadge: {
-    backgroundColor: colors.surfaceVariant,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
-    alignItems: 'center',
-    minWidth: 70,
-  },
-  statsBadgeOnline: {
-    backgroundColor: colors.primaryLight,
-  },
-  statsNumber: {
-    fontSize: typography.h5,
-    fontWeight: typography.bold,
-    color: colors.primary,
-  },
-  statsLabel: {
-    fontSize: typography.caption,
-    color: colors.primary,
-  },
-  ordersInfoCard: {
+  statusToggleTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  statusToggleText: { fontSize: typography.body2, fontWeight: typography.bold, color: colors.surface },
+  
+  // ✅ بطاقة حالة استقبال الطلبات
+  availabilityCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.primaryLight + '10',
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
-    marginTop: 0,
-    marginBottom: 12,
-  },
-  ordersInfoText: {
-    fontSize: typography.body2,
-    color: colors.primary,
-    fontWeight: typography.medium,
-    flex: 1,
-  },
-  activeOrderCard: {
-    marginBottom: 16,
-    backgroundColor: colors.primaryLight + '15',
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
-  },
-  activeOrderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  activeOrderBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    padding: 12,
     borderRadius: 12,
-    gap: 4,
-  },
-  activeOrderBadgeText: {
-    fontSize: typography.caption,
-    fontWeight: typography.bold,
-    color: colors.surface,
-  },
-  activeOrderId: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  activeOrderStore: {
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 8,
-  },
-  activeOrderDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 12,
   },
-  activeOrderPrice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  activeOrderPriceValue: {
-    fontSize: typography.h6,
-    fontWeight: typography.bold,
-    color: colors.success,
-  },
-  activeOrderStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  activeOrderButton: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    alignItems: 'flex-end',
-  },
-  activeOrderButtonText: {
-    fontSize: typography.body2,
-    color: colors.primary,
-    fontWeight: typography.medium,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyContent: {
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  emptyTitleOnline: {
-    color: colors.primary,
-  },
-  emptyTitleOffline: {
-    color: colors.textDisabled,
-  },
-  emptySubtext: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  enableButton: {
-    marginTop: 24,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  enableButtonText: {
-    color: colors.surface,
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 32,
-    alignItems: 'center',
-    minWidth: 200,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalText: {
-    fontSize: typography.body1,
-    color: colors.text,
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  initialLoadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  initialLoadingText: {
-    fontSize: typography.body1,
-    color: colors.textSecondary,
-    marginTop: 16,
-  },
+  availabilityCardActive: { backgroundColor: colors.success + '15', borderWidth: 1, borderColor: colors.success },
+  availabilityCardInactive: { backgroundColor: colors.danger + '15', borderWidth: 1, borderColor: colors.danger },
+  availabilityLabel: { fontSize: typography.caption, color: colors.textSecondary },
+  availabilityValue: { fontSize: typography.body2, fontWeight: typography.bold },
+  availabilityActive: { color: colors.success },
+  availabilityInactive: { color: colors.danger },
+  
+  driverCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  driverAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: 12, position: 'relative' },
+  driverAvatarOnline: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  driverAvatarText: { fontSize: typography.h4, fontWeight: typography.bold, color: colors.primary },
+  onlineBadge: { position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.success, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.surface },
+  driverInfo: { flex: 1 },
+  driverName: { fontSize: typography.body1, fontWeight: typography.bold, color: colors.text },
+  driverPhone: { fontSize: typography.caption, color: colors.textSecondary, marginTop: 2 },
+  statsBadge: { backgroundColor: colors.surfaceVariant, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24, alignItems: 'center', minWidth: 70 },
+  statsNumber: { fontSize: typography.h5, fontWeight: typography.bold, color: colors.primary },
+  statsLabel: { fontSize: typography.caption, color: colors.primary },
+  
+  // الطلب النشط
+  activeOrderCard: { marginBottom: 16, backgroundColor: colors.primaryLight + '15', borderWidth: 1, borderColor: colors.primaryLight },
+  activeOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  activeOrderBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  activeOrderBadgeText: { fontSize: typography.caption, fontWeight: typography.bold, color: colors.surface },
+  activeOrderId: { fontSize: typography.caption, color: colors.textSecondary },
+  activeOrderStore: { fontSize: typography.body1, fontWeight: typography.bold, color: colors.text, marginBottom: 8 },
+  activeOrderDetails: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  activeOrderPriceValue: { fontSize: typography.h6, fontWeight: typography.bold, color: colors.success },
+  activeOrderButton: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.divider, alignItems: 'flex-end' },
+  activeOrderButtonText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium },
+  
+  ordersInfoCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.primaryLight + '10', borderWidth: 1, borderColor: colors.primaryLight, padding: 12, borderRadius: 12, marginBottom: 12 },
+  ordersInfoText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium, flex: 1 },
+  
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  emptyTitle: { fontSize: 20, fontWeight: 'bold', color: colors.textDisabled, marginTop: 20, marginBottom: 8 },
+  emptySubtext: { fontSize: typography.body2, color: colors.textSecondary, textAlign: 'center', marginTop: 8 },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: colors.surface, borderRadius: 20, padding: 32, alignItems: 'center', minWidth: 200, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+  modalText: { fontSize: typography.body1, color: colors.text, marginTop: 16, textAlign: 'center' },
+  
+  initialLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  initialLoadingText: { fontSize: typography.body1, color: colors.textSecondary, marginTop: 16 },
 });

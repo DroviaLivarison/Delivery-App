@@ -41,6 +41,7 @@ The content is organized as follows:
 
 <directory_structure>
 .env.example
+.github/workflows/build.yml
 .gitignore
 App.js
 app.json
@@ -141,118 +142,6 @@ export default function App() {
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
-}
-</file>
-
-<file path="app.json">
-{
-  "expo": {
-    "name": "Driver App",
-    "slug": "driver-app",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": ["**/*"],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.driverapp",
-      "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "نحتاج إلى موقعك لتوصيل الطلبات",
-        "NSLocationAlwaysUsageDescription": "نحتاج إلى موقعك في الخلفية لتحديث حالة التوصيل",
-        "UIBackgroundModes": ["location", "fetch"]
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "com.yourcompany.driverapp",
-      "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
-      ]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك لتوصيل الطلبات"
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#ffffff"
-        }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0"
-          },
-          "ios": {
-            "deploymentTarget": "15.1"
-          }
-        }
-      ]
-    ],
-    "updates": {
-      "url": "https://u.expo.dev/60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
-    },
-    "runtimeVersion": {
-      "policy": "sdkVersion"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
-      }
-    }
-  }
-}
-</file>
-
-<file path="eas.json">
-{
-  "cli": {
-    "version": ">= 18.5.0",
-    "appVersionSource": "remote"
-  },
-  "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal"
-    },
-    "preview": {
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "production": {
-      "autoIncrement": true,
-      "android": {
-        "buildType": "app-bundle"
-      }
-    }
-  },
-  "submit": {
-    "production": {}
-  }
 }
 </file>
 
@@ -662,6 +551,8 @@ export default apiClient;
 </file>
 
 <file path="src/api/driverService.js">
+// src/api/driverService.js - النسخة النهائية المعدلة
+
 import apiClient from './client';
 import { getSecureItem, saveSecureItem, deleteSecureItem } from '../utils/storage';
 
@@ -674,7 +565,17 @@ class DriverService {
   async getProfile() {
     try {
       const response = await apiClient.get(`${this.baseUrl}/profile`);
+      console.log('📊 Profile API response:', JSON.stringify(response.data, null, 2));
       const user = this.normalizeUser(response.data.data);
+      console.log('📊 Normalized user:', {
+        id: user?.id,
+        name: user?.name,
+        role: user?.role,
+        isActive: user?.isActive,
+        isVerified: user?.isVerified,
+        isAvailable: user?.isAvailable,
+        isOnline: user?.isOnline
+      });
       this.cachedAvailability = user?.isAvailable || false;
       return user;
     } catch (error) {
@@ -715,18 +616,18 @@ class DriverService {
   async toggleAvailability(isOnline) {
     try {
       console.log('📤 Toggling availability:', { isOnline: isOnline });
-      
+
       const response = await apiClient.put(`${this.baseUrl}/profile/availability`, {
         isOnline: isOnline,
         isAvailable: isOnline
       });
-      
+
       console.log('✅ Toggle response:', response.data);
-      
+
       if (response.data?.success) {
         this.cachedAvailability = isOnline;
       }
-      
+
       return { success: true, data: response.data };
     } catch (error) {
       console.error('❌ Toggle availability error:', error);
@@ -783,28 +684,28 @@ class DriverService {
   async getAvailableOrders() {
     try {
       console.log('🔄 Fetching available orders from /orders/available');
-      
+
       const response = await apiClient.get(`${this.baseUrl}/orders/available`);
-      
+
       console.log('📦 Available orders API response:', JSON.stringify(response.data, null, 2));
-      
+
       let orders = [];
       let stats = {};
       let isAvailable = false;
       let isOnline = false;
-      
+
       if (response.data?.success && response.data?.data) {
         orders = response.data.data.orders || [];
         stats = response.data.data.stats || {};
         isAvailable = response.data.data.isAvailable || false;
         isOnline = response.data.data.isOnline || false;
       }
-      
+
       console.log(`✅ Found ${orders.length} available orders`);
       console.log(`📊 Driver status from server: isAvailable=${isAvailable}, isOnline=${isOnline}`);
-      
+
       this.cachedAvailability = isAvailable;
-      
+
       return {
         orders: this.normalizeOrders(orders),
         stats: stats,
@@ -821,17 +722,16 @@ class DriverService {
     try {
       console.log('🔄 Fetching active order from /orders/active');
       const response = await apiClient.get(`${this.baseUrl}/orders/active`);
-      
+
       if (!response.data?.data) {
         console.log('📭 No active order found');
         return null;
       }
-      
+
       const order = this.normalizeOrder(response.data.data.order || response.data.data);
       console.log('✅ Active order found:', order?.id);
       return order;
     } catch (error) {
-      // ✅ معالجة خاصة لخطأ 500 - نعتبر أنه لا يوجد طلب نشط
       if (error.response?.status === 500) {
         console.log('⚠️ Backend error (500) on getActiveOrder - treating as no active order');
         return null;
@@ -893,10 +793,8 @@ class DriverService {
     }
   }
 
-  // ✅ الدالة الكاملة المعدلة لـ updateOrderStatus
   async updateOrderStatus(orderId, status, location = null) {
     try {
-      // ✅ التحقق من صحة الحالة
       const validStatuses = ['pending', 'accepted', 'ready', 'picked', 'delivered', 'cancelled'];
       if (!validStatuses.includes(status)) {
         console.error('❌ Invalid status:', status);
@@ -905,11 +803,9 @@ class DriverService {
           message: `حالة غير صالحة: ${status}`
         };
       }
-      
-      // ✅ بناء الـ payload
+
       const payload = { status };
-      
-      // ✅ فقط أضف location إذا كان object صالح وله الخصائص المطلوبة
+
       if (location && typeof location === 'object') {
         if (location.latitude && location.longitude) {
           payload.location = {
@@ -917,17 +813,11 @@ class DriverService {
             longitude: location.longitude
           };
           console.log('📍 Adding location to payload:', payload.location);
-        } else if (location.coordinates || location.lat || location.lng) {
-          // دعم صيغ مختلفة للموقع
-          payload.location = {
-            latitude: location.latitude || location.lat || location.coordinates?.[1],
-            longitude: location.longitude || location.lng || location.coordinates?.[0]
-          };
         }
       }
-      
+
       console.log('📤 Updating order status:', { orderId, status, hasLocation: !!payload.location });
-      
+
       const response = await apiClient.put(`${this.baseUrl}/orders/${orderId}/status`, payload);
       return { success: true, data: response.data };
     } catch (error) {
@@ -1014,6 +904,38 @@ class DriverService {
     }
   }
 
+  // ✅ التحقق من حالة الحساب (نشط/غير نشط)
+  async checkAccountStatus() {
+    try {
+      const profile = await this.getProfile();
+      if (!profile) return { isActive: true, isVerified: true, isOnline: false, isAvailable: false };
+
+      return {
+        isActive: profile.isActive === true,
+        isVerified: profile.isVerified === true,
+        isOnline: profile.isOnline === true,
+        isAvailable: profile.isAvailable === true
+      };
+    } catch (error) {
+      console.error('Check account status error:', error);
+      return { isActive: true, isVerified: true, isOnline: false, isAvailable: false };
+    }
+  }
+
+  // ✅ تحديث حالة الحساب
+  async updateAccountStatus(isActive) {
+    try {
+      const response = await apiClient.put(`${this.baseUrl}/profile/status`, { isActive });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Update account status error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تحديث حالة الحساب'
+      };
+    }
+  }
+
   // ========== دوال مساعدة ==========
 
   normalizeOrder(order) {
@@ -1040,18 +962,44 @@ class DriverService {
   normalizeUser(user) {
     if (!user) return null;
 
+    console.log('📊 Raw user data:', JSON.stringify(user, null, 2));
+
+    // ✅ بما أن API لا يعيد isActive و isVerified، نعتبر الحساب نشط وموثق دائماً
+    const isActiveValue = true;  // الحساب نشط دائماً
+    const isVerifiedValue = true;  // الحساب موثق دائماً
+    const isOnlineValue = user.isOnline === true;
+    const isAvailableValue = user.driverInfo?.isAvailable === true;
+
+    console.log('📊 Status values:', {
+      raw_isOnline: user.isOnline,
+      raw_isAvailable: user.driverInfo?.isAvailable,
+      computed_isActive: isActiveValue,
+      computed_isVerified: isVerifiedValue,
+      computed_isOnline: isOnlineValue,
+      computed_isAvailable: isAvailableValue
+    });
+
     return {
       ...user,
       id: user._id,
       fullName: user.name,
+      name: user.name,
       avatar: user.image,
+      image: user.image,
       phone: user.phone,
       email: user.email,
-      isAvailable: user.driverInfo?.isAvailable || false,
+      isActive: isActiveValue,
+      isVerified: isVerifiedValue,
+      isOnline: isOnlineValue,
+      isAvailable: isAvailableValue,
       totalDeliveries: user.driverInfo?.totalDeliveries || 0,
       earnings: user.driverInfo?.earnings || 0,
       rating: user.driverInfo?.rating || 0,
-      totalRatings: user.driverInfo?.totalRatings || 0
+      totalRatings: user.driverInfo?.totalRatings || 0,
+      currentLocation: user.driverInfo?.currentLocation,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      role: user.role || 'driver'
     };
   }
 
@@ -3648,36 +3596,41 @@ export default function LoginScreen() {
 
   const validate = () => {
     const newErrors = {};
-    
+
     if (!phone.trim()) {
       newErrors.phone = 'رقم الهاتف مطلوب';
     } else if (phone.length < 10) {
       newErrors.phone = 'رقم الهاتف غير صحيح';
     }
-    
+
     if (!password.trim()) {
       newErrors.password = 'كلمة المرور مطلوبة';
     } else if (password.length < 6) {
       newErrors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleLogin = async () => {
     if (!validate()) return;
-    
+
     const success = await login(phone, password);
     if (!success) {
       Alert.alert('خطأ', 'فشل تسجيل الدخول. تحقق من رقم الهاتف وكلمة المرور');
+    }
+
+    const profile = await DriverService.getProfile();
+    if (profile && !profile.isAvailable) {
+      await DriverService.toggleAvailability(true);
     }
   };
 
   return (
     <SafeAreaView style={globalStyles.safeArea}>
       <LoadingOverlay visible={isLoading} message="جاري تسجيل الدخول..." />
-      
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={globalStyles.container}
@@ -5474,6 +5427,8 @@ const styles = StyleSheet.create({
 </file>
 
 <file path="src/screens/main/OrdersScreen.js">
+// src/screens/main/OrdersScreen.js - النسخة المعدلة بالكامل
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -5516,6 +5471,7 @@ export default function OrdersScreen() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusModalMessage, setStatusModalMessage] = useState('');
   const [flatListKey, setFlatListKey] = useState(0);
+  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
   const { isOnline, toggleOnlineStatus, user } = useAuthStore();
   const insets = useSafeAreaInsets();
   const flatListRef = useRef(null);
@@ -5523,7 +5479,39 @@ export default function OrdersScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const switchAnim = useRef(new Animated.Value(isOnline ? 1 : 0)).current;
 
+  // ✅ التحقق من حالة الحساب
+  const checkAccountStatus = async () => {
+    const status = await DriverService.checkAccountStatus();
+    setAccountStatus(status);
+    
+    if (!status.isActive) {
+      Alert.alert(
+        'تنبيه',
+        'حسابك غير نشط. يرجى التواصل مع الدعم الفني.',
+        [{ text: 'حسناً' }]
+      );
+    }
+  };
+
   useEffect(() => {
+    const initDriver = async () => {
+      await checkAccountStatus();
+      
+      // ✅ فقط إذا كان الحساب نشطاً
+      if (accountStatus.isActive) {
+        const profile = await DriverService.getProfile();
+        if (profile && !profile.isAvailable) {
+          console.log('🔄 Setting driver online on app start...');
+          await DriverService.toggleAvailability(true);
+          const { setOnlineStatus } = useAuthStore.getState();
+          setOnlineStatus(true);
+        }
+      }
+      await loadOrders();
+    };
+
+    initDriver();
+
     if (isOnline) {
       Animated.loop(
         Animated.sequence([
@@ -5553,17 +5541,15 @@ export default function OrdersScreen() {
       // 1. جلب الطلبات المتاحة
       const availableResult = await DriverService.getAvailableOrders();
       setAvailableOrders(availableResult.orders || []);
-      
+
       // 2. جلب الطلب النشط للمندوب
       try {
         const activeOrderResult = await DriverService.getActiveOrder();
         setActiveOrder(activeOrderResult);
-        
-        // ✅ إذا كان هناك طلب نشط ولم نكن في صفحة الطلب الحالي، ننتقل إليه
+
         if (activeOrderResult) {
           const currentRoute = navigation.getState()?.routes[navigation.getState().index]?.name;
           if (currentRoute !== 'ActiveOrder') {
-            // نعرض إشعار بأن هناك طلب نشط
             console.log('📢 Active order exists:', activeOrderResult.id);
           }
         }
@@ -5571,7 +5557,7 @@ export default function OrdersScreen() {
         console.log('No active order or error fetching:', activeError?.message);
         setActiveOrder(null);
       }
-      
+
     } catch (error) {
       console.error('Load orders error:', error);
       setAvailableOrders([]);
@@ -5584,18 +5570,20 @@ export default function OrdersScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadOrders();
-    }, [loadOrders])
+      if (accountStatus.isActive) {
+        loadOrders();
+      }
+    }, [loadOrders, accountStatus.isActive])
   );
 
   useEffect(() => {
     const initSocket = async () => {
-      if (isOnline) {
+      if (isOnline && accountStatus.isActive) {
         await connectSocket();
-        
+
         onEvent('driver:new-order', (data) => {
           loadOrders();
-          
+
           const storeName = data?.storeName || data?.store?.name || 'متجر';
           sendLocalNotification(
             'طلب جديد',
@@ -5603,15 +5591,15 @@ export default function OrdersScreen() {
             { orderId: data?.orderId || data?._id }
           );
         });
-        
+
         onEvent('driver:status:changed', (data) => {
           loadOrders();
         });
-        
+
         onEvent('driver:available:orders:refresh', () => {
           loadOrders();
         });
-        
+
         onEvent('order:status:updated', (data) => {
           if (data.orderId === activeOrder?.id || data.orderId === activeOrder?._id) {
             loadOrders();
@@ -5619,43 +5607,48 @@ export default function OrdersScreen() {
         });
       }
     };
-    
+
     initSocket();
-    
+
     return () => {
       offEvent('driver:new-order');
       offEvent('driver:status:changed');
       offEvent('driver:available:orders:refresh');
       offEvent('order:status:updated');
     };
-  }, [isOnline, loadOrders, activeOrder]);
+  }, [isOnline, loadOrders, activeOrder, accountStatus.isActive]);
 
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadOrders();
-  }, [loadOrders]);
+    if (accountStatus.isActive) {
+      setRefreshing(true);
+      loadOrders();
+    }
+  }, [loadOrders, accountStatus.isActive]);
 
   const handleAccept = async (orderId) => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط، لا يمكنك قبول الطلبات');
+      return;
+    }
+    
     setProcessingId(orderId);
     try {
       const result = await DriverService.acceptOrder(orderId);
-      
+
       if (result.success) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
-        const acceptedOrderData = availableOrders.find(order => 
+
+        const acceptedOrderData = availableOrders.find(order =>
           (order.id === orderId || order._id === orderId)
         );
-        
+
         Alert.alert('نجاح', 'تم قبول الطلب بنجاح');
-        
-        // ✅ إعادة تحميل الطلبات
+
         await loadOrders();
-        
-        // ✅ التنقل إلى صفحة الطلب الحالي
+
         if (acceptedOrderData) {
-          navigation.navigate('ActiveOrder', { 
-            order: acceptedOrderData 
+          navigation.navigate('ActiveOrder', {
+            order: acceptedOrderData
           });
         }
       } else {
@@ -5670,13 +5663,18 @@ export default function OrdersScreen() {
   };
 
   const handleReject = async (orderId) => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+    
     setProcessingId(orderId);
     try {
       const result = await DriverService.rejectOrder(orderId);
-      
+
       if (result.success) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setAvailableOrders(prev => prev.filter(order => 
+        setAvailableOrders(prev => prev.filter(order =>
           (order.id !== orderId && order._id !== orderId)
         ));
         Alert.alert('تم', 'تم رفض الطلب');
@@ -5692,18 +5690,23 @@ export default function OrdersScreen() {
   };
 
   const handleToggleOnline = async () => {
-    if (isToggling) return;
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط، لا يمكنك تغيير حالة الاستقبال');
+      return;
+    }
     
+    if (isToggling) return;
+
     setIsToggling(true);
     setShowStatusModal(true);
     setStatusModalMessage(isOnline ? 'جاري إيقاف الاستقبال...' : 'جاري تفعيل الاستقبال...');
-    
+
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (error) {}
+    } catch (error) { }
 
     const success = await toggleOnlineStatus();
-    
+
     if (success) {
       Animated.spring(switchAnim, {
         toValue: isOnline ? 0 : 1,
@@ -5711,7 +5714,7 @@ export default function OrdersScreen() {
         tension: 50,
         friction: 7,
       }).start();
-      
+
       setTimeout(async () => {
         await loadOrders();
         setShowStatusModal(false);
@@ -5719,7 +5722,7 @@ export default function OrdersScreen() {
     } else {
       setShowStatusModal(false);
     }
-    
+
     setIsToggling(false);
   };
 
@@ -5748,10 +5751,10 @@ export default function OrdersScreen() {
   // ✅ عرض الطلب النشط
   const ActiveOrderCard = () => {
     if (!activeOrder) return null;
-    
+
     const orderId = activeOrder.id || activeOrder._id;
     const displayOrderId = orderId?.slice(-8) || '00000000';
-    
+
     return (
       <TouchableOpacity onPress={goToActiveOrder} activeOpacity={0.8}>
         <Card style={styles.activeOrderCard}>
@@ -5762,9 +5765,9 @@ export default function OrdersScreen() {
             </View>
             <Text style={styles.activeOrderId}>#{displayOrderId}</Text>
           </View>
-          
+
           <Text style={styles.activeOrderStore}>{activeOrder.store?.name || 'متجر'}</Text>
-          
+
           <View style={styles.activeOrderDetails}>
             <View style={styles.activeOrderPrice}>
               <Text style={styles.activeOrderPriceValue}>{activeOrder.totalPrice || 0} د.ع</Text>
@@ -5773,7 +5776,7 @@ export default function OrdersScreen() {
               <OrderStatusBadge status={activeOrder.status} size="small" />
             </View>
           </View>
-          
+
           <View style={styles.activeOrderButton}>
             <Text style={styles.activeOrderButtonText}>تابع الطلب →</Text>
           </View>
@@ -5796,19 +5799,21 @@ export default function OrdersScreen() {
         ]}
       >
         <Ionicons
-          name={isOnline ? "bicycle" : "fast-food-outline"}
+          name={isOnline && accountStatus.isActive ? "bicycle" : "fast-food-outline"}
           size={80}
-          color={isOnline ? colors.primary : colors.textDisabled}
+          color={(isOnline && accountStatus.isActive) ? colors.primary : colors.textDisabled}
         />
-        <Text style={[styles.emptyTitle, isOnline ? styles.emptyTitleOnline : styles.emptyTitleOffline]}>
-          {isOnline ? '✨ جاهز للاستلام ✨' : '⚠️ غير متصل'}
+        <Text style={[styles.emptyTitle, (isOnline && accountStatus.isActive) ? styles.emptyTitleOnline : styles.emptyTitleOffline]}>
+          {!accountStatus.isActive ? '⚠️ الحساب غير نشط' : (isOnline ? '✨ جاهز للاستلام ✨' : '⚠️ غير متصل')}
         </Text>
         <Text style={styles.emptySubtext}>
-          {isOnline
-            ? 'الطلبات الجديدة ستظهر هنا تلقائياً'
-            : 'فعّل حالة الاستقبال لتبدأ باستلام الطلبات'}
+          {!accountStatus.isActive 
+            ? 'حسابك غير نشط. يرجى التواصل مع الدعم الفني'
+            : (isOnline
+              ? 'الطلبات الجديدة ستظهر هنا تلقائياً'
+              : 'فعّل حالة الاستقبال لتبدأ باستلام الطلبات')}
         </Text>
-        {!isOnline && (
+        {!isOnline && accountStatus.isActive && (
           <TouchableOpacity
             style={styles.enableButton}
             onPress={handleToggleOnline}
@@ -5826,10 +5831,10 @@ export default function OrdersScreen() {
     <TouchableOpacity
       style={[
         styles.statusToggleButton,
-        isOnline ? styles.statusToggleOnline : styles.statusToggleOffline,
+        isOnline && accountStatus.isActive ? styles.statusToggleOnline : styles.statusToggleOffline,
       ]}
       onPress={handleToggleOnline}
-      disabled={isToggling}
+      disabled={isToggling || !accountStatus.isActive}
       activeOpacity={0.7}
     >
       <Animated.View
@@ -5849,13 +5854,13 @@ export default function OrdersScreen() {
         <Ionicons
           name="checkmark-circle"
           size={18}
-          color={isOnline ? colors.surface : colors.textDisabled}
+          color={isOnline && accountStatus.isActive ? colors.surface : colors.textDisabled}
           style={styles.statusToggleIconLeft}
         />
         <Ionicons
           name="close-circle"
           size={18}
-          color={!isOnline ? colors.surface : colors.textDisabled}
+          color={!isOnline && accountStatus.isActive ? colors.surface : colors.textDisabled}
           style={styles.statusToggleIconRight}
         />
       </View>
@@ -5864,7 +5869,7 @@ export default function OrdersScreen() {
 
   const renderHeader = () => (
     <View style={styles.headerSection}>
-      <View style={[styles.statusCard, isOnline && styles.statusCardOnline]}>
+      <View style={[styles.statusCard, (isOnline && accountStatus.isActive) && styles.statusCardOnline]}>
         <View style={styles.statusInfo}>
           <Animated.View
             style={[
@@ -5874,12 +5879,14 @@ export default function OrdersScreen() {
               },
             ]}
           >
-            <View style={[styles.statusDot, isOnline && styles.onlineDot]} />
+            <View style={[styles.statusDot, (isOnline && accountStatus.isActive) && styles.onlineDot]} />
           </Animated.View>
           <View>
             <Text style={styles.statusLabel}>حالة الاستقبال</Text>
-            <Text style={[styles.statusValue, isOnline ? styles.onlineText : styles.offlineText]}>
-              {isOnline ? 'متصل · جاهز للطلبات' : 'غير متصل · غير متاح'}
+            <Text style={[styles.statusValue, (isOnline && accountStatus.isActive) ? styles.onlineText : styles.offlineText]}>
+              {!accountStatus.isActive 
+                ? 'الحساب غير نشط' 
+                : (isOnline ? 'متصل · جاهز للطلبات' : 'غير متصل · غير متاح')}
             </Text>
           </View>
         </View>
@@ -5887,9 +5894,9 @@ export default function OrdersScreen() {
       </View>
 
       <View style={styles.driverCard}>
-        <View style={[styles.driverAvatar, isOnline && styles.driverAvatarOnline]}>
+        <View style={[styles.driverAvatar, (isOnline && accountStatus.isActive) && styles.driverAvatarOnline]}>
           <Text style={styles.driverAvatarText}>{user?.name?.charAt(0) || 'م'}</Text>
-          {isOnline && (
+          {(isOnline && accountStatus.isActive) && (
             <View style={styles.onlineBadge}>
               <Ionicons name="checkmark" size={10} color={colors.surface} />
             </View>
@@ -5899,16 +5906,32 @@ export default function OrdersScreen() {
           <Text style={styles.driverName}>{user?.name || 'مندوب'}</Text>
           <Text style={styles.driverPhone}>{user?.phone}</Text>
         </View>
-        <View style={[styles.statsBadge, isOnline && styles.statsBadgeOnline]}>
+        <View style={[styles.statsBadge, (isOnline && accountStatus.isActive) && styles.statsBadgeOnline]}>
           <Text style={styles.statsNumber}>{availableOrders.length}</Text>
           <Text style={styles.statsLabel}>طلب جديد</Text>
+        </View>
+      </View>
+
+      {/* عرض حالة التوثيق والحساب */}
+      <View style={styles.accountStatusCard}>
+        <View style={styles.accountStatusRow}>
+          <Ionicons name="checkmark-circle" size={16} color={accountStatus.isVerified ? colors.success : colors.textDisabled} />
+          <Text style={styles.accountStatusText}>
+            {accountStatus.isVerified ? 'حساب موثق' : 'حساب غير موثق'}
+          </Text>
+        </View>
+        <View style={styles.accountStatusRow}>
+          <Ionicons name="shield-checkmark" size={16} color={accountStatus.isActive ? colors.success : colors.danger} />
+          <Text style={[styles.accountStatusText, !accountStatus.isActive && styles.inactiveText]}>
+            {accountStatus.isActive ? 'حساب نشط' : 'حساب غير نشط'}
+          </Text>
         </View>
       </View>
 
       {/* ✅ عرض الطلب النشط إن وجد */}
       <ActiveOrderCard />
 
-      {isOnline && availableOrders.length > 0 && !activeOrder && (
+      {(isOnline && accountStatus.isActive) && availableOrders.length > 0 && !activeOrder && (
         <View style={styles.ordersInfoCard}>
           <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
           <Text style={styles.ordersInfoText}>
@@ -5953,7 +5976,7 @@ export default function OrdersScreen() {
   return (
     <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
       <Header title="الطلبات" showNotification />
-      
+
       <StatusChangeModal />
 
       <FlatList
@@ -5970,7 +5993,7 @@ export default function OrdersScreen() {
             onRefresh={onRefresh}
             colors={[colors.primary]}
             tintColor={colors.primary}
-            enabled={isOnline}
+            enabled={isOnline && accountStatus.isActive}
           />
         }
         contentContainerStyle={[
@@ -6180,6 +6203,26 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.primary,
   },
+  accountStatusCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  accountStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  accountStatusText: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+  },
+  inactiveText: {
+    color: colors.danger,
+  },
   ordersInfoCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -6349,7 +6392,8 @@ const styles = StyleSheet.create({
 </file>
 
 <file path="src/screens/main/ProfileScreen.js">
-// src/screens/main/ProfileScreen.js - الإصدار المصحح
+// src/screens/main/ProfileScreen.js - النسخة المعدلة بالكامل
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -6379,6 +6423,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
   
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -6391,6 +6436,12 @@ export default function ProfileScreen() {
     newPassword: '',
     confirmPassword: '',
   });
+
+  // ✅ جلب حالة الحساب
+  const loadAccountStatus = async () => {
+    const status = await DriverService.checkAccountStatus();
+    setAccountStatus(status);
+  };
 
   const loadStats = async () => {
     try {
@@ -6419,6 +6470,7 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     loadStats();
+    loadAccountStatus();
   }, []);
 
   const handleUpdateProfile = async () => {
@@ -6525,12 +6577,39 @@ export default function ProfileScreen() {
             <Text style={styles.infoLabel}>نوع الحساب:</Text>
             <Text style={styles.infoValue}>مندوب توصيل</Text>
           </View>
+          
+          {/* ✅ عرض حالة التوثيق */}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>حالة الحساب:</Text>
-            <Text style={[styles.infoValue, user?.isVerified ? styles.verified : styles.unverified]}>
-              {user?.isVerified ? 'موثق ✓' : 'غير موثق'}
+            <Text style={styles.infoLabel}>التوثيق:</Text>
+            <Text style={[styles.infoValue, accountStatus.isVerified ? styles.verified : styles.unverified]}>
+              {accountStatus.isVerified ? 'موثق ✓' : 'غير موثق'}
             </Text>
           </View>
+          
+          {/* ✅ عرض حالة الحساب (نشط/غير نشط) */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الحساب:</Text>
+            <Text style={[styles.infoValue, accountStatus.isActive ? styles.activeStatus : styles.inactiveStatus]}>
+              {accountStatus.isActive ? 'نشط ✓' : 'غير نشط ✗'}
+            </Text>
+          </View>
+          
+          {/* ✅ عرض حالة الاتصال */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الاتصال:</Text>
+            <Text style={[styles.infoValue, user?.isOnline ? styles.onlineStatus : styles.offlineStatus]}>
+              {user?.isOnline ? 'متصل 🟢' : 'غير متصل ⚫'}
+            </Text>
+          </View>
+          
+          {/* ✅ عرض حالة التوفر للتوصيل */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>متاح للتوصيل:</Text>
+            <Text style={[styles.infoValue, user?.isAvailable ? styles.availableStatus : styles.unavailableStatus]}>
+              {user?.isAvailable ? 'متاح ✓' : 'غير متاح ✗'}
+            </Text>
+          </View>
+          
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>تاريخ الانضمام:</Text>
             <Text style={styles.infoValue}>
@@ -6547,6 +6626,7 @@ export default function ProfileScreen() {
         />
       </ScrollView>
       
+      {/* مودال تعديل الملف الشخصي */}
       <Modal visible={editModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -6590,6 +6670,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
       
+      {/* مودال تغيير كلمة المرور */}
       <Modal visible={passwordModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -6734,6 +6815,24 @@ const styles = StyleSheet.create({
   unverified: {
     color: colors.danger,
   },
+  activeStatus: {
+    color: colors.success,
+  },
+  inactiveStatus: {
+    color: colors.danger,
+  },
+  onlineStatus: {
+    color: colors.success,
+  },
+  offlineStatus: {
+    color: colors.textDisabled,
+  },
+  availableStatus: {
+    color: colors.success,
+  },
+  unavailableStatus: {
+    color: colors.danger,
+  },
   logoutButton: {
     marginHorizontal: 16,
     marginBottom: 32,
@@ -6779,6 +6878,8 @@ const styles = StyleSheet.create({
 </file>
 
 <file path="src/store/authStore.js">
+// src/store/authStore.js - النسخة المصححة بالكامل
+
 import { create } from 'zustand';
 import DriverService from '../api/driverService';
 import { connectSocket, disconnectSocket } from '../api/socket';
@@ -6821,7 +6922,9 @@ const useAuthStore = create((set, get) => ({
 
         await connectSocket();
 
-        if (profile?.isAvailable) {
+        const isAccountActive = profile?.isActive === true;
+
+        if (profile?.isAvailable && isAccountActive) {
           await LocationService.startTracking();
         }
 
@@ -6829,7 +6932,7 @@ const useAuthStore = create((set, get) => ({
           user: profile,
           isAuthenticated: true,
           isLoading: false,
-          isOnline: profile?.isAvailable || false,
+          isOnline: (profile?.isAvailable && isAccountActive) || false,
           stats: stats || get().stats
         });
 
@@ -6861,58 +6964,103 @@ const useAuthStore = create((set, get) => ({
 
   loadUser: async () => {
     set({ isLoading: true });
-
     try {
       const token = await getSecureItem('accessToken');
       if (!token) {
         set({ isAuthenticated: false, isLoading: false });
         return false;
       }
-
+      
       const profile = await DriverService.getProfile();
-
+      
       if (profile) {
         const stats = await DriverService.getStats();
-
         await connectSocket();
 
-        if (profile.isAvailable) {
-          await LocationService.startTracking();
+        // ✅ التحقق من أن الحساب نشط (isActive)
+        const isAccountActive = profile.isActive === true;
+        
+        console.log('📊 Profile loaded:', {
+          name: profile.name,
+          id: profile.id,
+          isActive: isAccountActive,
+          isVerified: profile.isVerified,
+          isAvailable: profile.isAvailable,
+          isOnline: profile.isOnline
+        });
+        
+        if (!isAccountActive) {
+          console.log('⚠️ Account is not active (isActive = false)');
+          set({
+            user: profile,
+            isAuthenticated: true,
+            isLoading: false,
+            isOnline: false,
+            stats: stats || get().stats
+          });
+          return true;
         }
 
+        // ✅ فقط إذا كان الحساب نشطاً، نتحقق من حالة التوفر
+        if (!profile.isAvailable) {
+          console.log('🔄 Driver is offline, setting online automatically...');
+          const toggleResult = await DriverService.toggleAvailability(true);
+          if (toggleResult.success) {
+            profile.isAvailable = true;
+            profile.isOnline = true;
+            console.log('✅ Driver automatically set to online');
+          }
+        }
+
+        if (profile.isAvailable && isAccountActive) {
+          await LocationService.startTracking();
+        }
+        
         set({
           user: profile,
           isAuthenticated: true,
           isLoading: false,
-          isOnline: profile.isAvailable || false,
+          isOnline: (profile.isAvailable && isAccountActive) || false,
           stats: stats || get().stats
         });
-
         return true;
       } else {
+        // ✅ إذا لم يتم العثور على الملف الشخصي، نقوم بتسجيل الخروج
+        await get().logout();
         set({ isAuthenticated: false, isLoading: false });
         return false;
       }
     } catch (error) {
       console.error('Load user error:', error);
+      // ✅ في حالة الخطأ، نقوم بتسجيل الخروج
+      await get().logout();
       set({ isAuthenticated: false, isLoading: false });
       return false;
     }
   },
 
   toggleOnlineStatus: async () => {
-    const newStatus = !get().isOnline;
-    console.log('🔄 Toggling online status to:', newStatus);
+    const currentState = get();
+    const isAccountActive = currentState.user?.isActive === true;
     
+    // ✅ إذا كان الحساب غير نشط، لا يمكن تغيير الحالة
+    if (!isAccountActive) {
+      console.log('⚠️ Cannot toggle status - account is inactive');
+      return false;
+    }
+    
+    const newStatus = !currentState.isOnline;
+    console.log('🔄 Toggling online status to:', newStatus);
+
     const result = await DriverService.toggleAvailability(newStatus);
 
     if (result && result.success) {
       console.log('✅ Toggle successful, updating state');
-      
+
       set({ isOnline: newStatus });
 
-      if (get().user) {
-        set({ user: { ...get().user, isAvailable: newStatus, isOnline: newStatus } });
+      if (currentState.user) {
+        set({ user: { ...currentState.user, isAvailable: newStatus, isOnline: newStatus } });
       }
 
       if (newStatus) {
@@ -6920,7 +7068,7 @@ const useAuthStore = create((set, get) => ({
       } else {
         await LocationService.stopTracking();
       }
-      
+
       setTimeout(async () => {
         console.log('🔄 Verifying status after toggle...');
         const freshOrders = await DriverService.getAvailableOrders();
@@ -6929,7 +7077,7 @@ const useAuthStore = create((set, get) => ({
 
       return true;
     }
-    
+
     console.log('❌ Toggle failed');
     return false;
   },
@@ -6963,6 +7111,20 @@ const useAuthStore = create((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  setOnlineStatus: (status) => {
+    const isAccountActive = get().user?.isActive === true;
+    if (!isAccountActive && status) {
+      console.log('⚠️ Cannot set online - account is inactive');
+      return;
+    }
+    set({ isOnline: status });
+    if (status && isAccountActive) {
+      LocationService.startTracking();
+    } else {
+      LocationService.stopTracking();
+    }
+  },
 
   getDriverInfo: () => {
     const { user, stats, isOnline } = get();
@@ -7424,6 +7586,147 @@ export const deleteItem = async (key) => {
     return false;
   }
 };
+</file>
+
+<file path=".github/workflows/build.yml">
+name: EAS Build
+on:
+  push:
+    branches: [main] 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }} 
+      - name: Install dependencies
+        run: npm install
+      - name: Build on EAS
+        run: eas build --platform android --profile production --non-interactive
+</file>
+
+<file path="app.json">
+{
+  "expo": {
+    "name": "Driver App",
+    "slug": "delivery-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.driverapp",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "نحتاج إلى موقعك لتوصيل الطلبات",
+        "NSLocationAlwaysUsageDescription": "نحتاج إلى موقعك في الخلفية لتحديث حالة التوصيل",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourcompany.driverapp",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك لتوصيل الطلبات"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
+    ],
+    "updates": {
+      "url": "https://u.expo.dev/60a9f36d-0aa4-4d35-9872-1d2f1196fe88"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "1d383938-720e-42d0-a230-69bd85cff0eb"
+      }
+    }
+  }
+}
+</file>
+
+<file path="eas.json">
+{
+  "cli": {
+    "version": ">= 18.5.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
 </file>
 
 </files>

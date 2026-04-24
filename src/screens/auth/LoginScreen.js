@@ -26,36 +26,41 @@ export default function LoginScreen() {
 
   const validate = () => {
     const newErrors = {};
-    
+
     if (!phone.trim()) {
       newErrors.phone = 'رقم الهاتف مطلوب';
     } else if (phone.length < 10) {
       newErrors.phone = 'رقم الهاتف غير صحيح';
     }
-    
+
     if (!password.trim()) {
       newErrors.password = 'كلمة المرور مطلوبة';
     } else if (password.length < 6) {
       newErrors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleLogin = async () => {
     if (!validate()) return;
-    
+
     const success = await login(phone, password);
     if (!success) {
       Alert.alert('خطأ', 'فشل تسجيل الدخول. تحقق من رقم الهاتف وكلمة المرور');
+    }
+
+    const profile = await DriverService.getProfile();
+    if (profile && !profile.isAvailable) {
+      await DriverService.toggleAvailability(true);
     }
   };
 
   return (
     <SafeAreaView style={globalStyles.safeArea}>
       <LoadingOverlay visible={isLoading} message="جاري تسجيل الدخول..." />
-      
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={globalStyles.container}

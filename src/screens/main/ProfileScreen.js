@@ -1,4 +1,5 @@
-// src/screens/main/ProfileScreen.js - الإصدار المصحح
+// src/screens/main/ProfileScreen.js - النسخة المعدلة بالكامل
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -28,25 +29,32 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
-  
+  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
+
   const [formData, setFormData] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
     email: user?.email || '',
   });
-  
+
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
 
+  // ✅ جلب حالة الحساب
+  const loadAccountStatus = async () => {
+    const status = await DriverService.checkAccountStatus();
+    setAccountStatus(status);
+  };
+
   const loadStats = async () => {
     try {
       const history = await DriverService.getOrderHistory(1, 100);
       const completedOrders = history.orders?.filter(o => o.status === 'delivered') || [];
       const earnings = completedOrders.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
-      
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayOrders = history.orders?.filter(o => {
@@ -54,7 +62,7 @@ export default function ProfileScreen() {
         orderDate.setHours(0, 0, 0, 0);
         return o.status === 'delivered' && orderDate.getTime() === today.getTime();
       }).length || 0;
-      
+
       setStats({
         todayOrders: todayOrders,
         totalOrders: completedOrders.length,
@@ -68,13 +76,14 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     loadStats();
+    loadAccountStatus();
   }, []);
 
   const handleUpdateProfile = async () => {
     setLoading(true);
     const success = await updateProfile(formData);
     setLoading(false);
-    
+
     if (success) {
       Alert.alert('نجاح', 'تم تحديث الملف الشخصي');
       setEditModalVisible(false);
@@ -88,12 +97,12 @@ export default function ProfileScreen() {
       Alert.alert('خطأ', 'كلمة المرور الجديدة غير متطابقة');
       return;
     }
-    
+
     if (passwordData.newPassword.length < 6) {
       Alert.alert('خطأ', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
       return;
     }
-    
+
     setLoading(true);
     const result = await changePassword(
       passwordData.currentPassword,
@@ -101,7 +110,7 @@ export default function ProfileScreen() {
       passwordData.confirmPassword
     );
     setLoading(false);
-    
+
     if (result.success) {
       Alert.alert('نجاح', 'تم تغيير كلمة المرور');
       setPasswordModalVisible(false);
@@ -134,7 +143,7 @@ export default function ProfileScreen() {
     <SafeAreaView style={globalStyles.safeArea}>
       <LoadingOverlay visible={loading} />
       <Header title="الملف الشخصي" showNotification />
-      
+
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.profileHeader}>
           <View style={styles.avatar}>
@@ -143,7 +152,7 @@ export default function ProfileScreen() {
           <Text style={styles.name}>{user?.name || 'مندوب'}</Text>
           <Text style={styles.phone}>{user?.phone}</Text>
           <Text style={styles.email}>{user?.email || 'البريد الإلكتروني غير مضاف'}</Text>
-          
+
           <View style={styles.editButtons}>
             <Button
               title="تعديل الملف"
@@ -160,34 +169,72 @@ export default function ProfileScreen() {
             />
           </View>
         </View>
-        
+
         <View style={styles.statsContainer}>
           <StatCard icon="today-outline" value={stats.todayOrders} label="طلبات اليوم" />
           <StatCard icon="time-outline" value={stats.totalOrders} label="إجمالي الطلبات" />
           <StatCard icon="star-outline" value={`${stats.rating}★`} label="التقييم" />
           <StatCard icon="cash-outline" value={`${stats.earnings}`} label="الأرباح" />
         </View>
-        
+
         <Card style={styles.infoCard}>
           <Text style={styles.infoTitle}>معلومات الحساب</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>نوع الحساب:</Text>
             <Text style={styles.infoValue}>مندوب توصيل</Text>
           </View>
+
+          {/* ✅ عرض حالة التوثيق */}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>حالة الحساب:</Text>
-            <Text style={[styles.infoValue, user?.isVerified ? styles.verified : styles.unverified]}>
-              {user?.isVerified ? 'موثق ✓' : 'غير موثق'}
+            <Text style={styles.infoLabel}>التوثيق:</Text>
+            <Text style={[styles.infoValue, accountStatus.isVerified ? styles.verified : styles.unverified]}>
+              {accountStatus.isVerified ? 'موثق ✓' : 'غير موثق'}
             </Text>
           </View>
+
+          {/* ✅ عرض حالة الحساب (نشط/غير نشط) */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الحساب:</Text>
+            <Text style={[styles.infoValue, accountStatus.isActive ? styles.activeStatus : styles.inactiveStatus]}>
+              {accountStatus.isActive ? 'نشط ✓' : 'غير نشط ✗'}
+            </Text>
+          </View>
+
+          {/* ✅ عرض حالة الاتصال */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الاتصال:</Text>
+            <Text style={[styles.infoValue, user?.isOnline ? styles.onlineStatus : styles.offlineStatus]}>
+              {user?.isOnline ? 'متصل 🟢' : 'غير متصل ⚫'}
+            </Text>
+          </View>
+
+          {/* ✅ عرض حالة التوفر للتوصيل */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الاتصال:</Text>
+            <Text style={[styles.infoValue, user?.isOnline ? styles.onlineStatus : styles.offlineStatus]}>
+              {user?.isOnline ? 'متصل 🟢' : 'غير متصل ⚫'}
+            </Text>
+          </View>
+
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>تاريخ الانضمام:</Text>
             <Text style={styles.infoValue}>
               {new Date(user?.createdAt).toLocaleDateString('ar')}
             </Text>
           </View>
+
+          {/* ✅ عرض نص الحالة الكامل */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>الحالة:</Text>
+            <Text style={[styles.infoValue, styles.statusTextValue]}>
+              {user?.statusText || 'غير محدد'}
+            </Text>
+          </View>
+
+
+
         </Card>
-        
+
         <Button
           title="تسجيل الخروج"
           onPress={handleLogout}
@@ -195,12 +242,13 @@ export default function ProfileScreen() {
           style={styles.logoutButton}
         />
       </ScrollView>
-      
+
+      {/* مودال تعديل الملف الشخصي */}
       <Modal visible={editModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>تعديل الملف الشخصي</Text>
-            
+
             <TextInput
               style={styles.modalInput}
               placeholder="الاسم"
@@ -221,7 +269,7 @@ export default function ProfileScreen() {
               onChangeText={(text) => setFormData({ ...formData, email: text })}
               keyboardType="email-address"
             />
-            
+
             <View style={styles.modalButtons}>
               <Button
                 title="إلغاء"
@@ -238,12 +286,13 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-      
+
+      {/* مودال تغيير كلمة المرور */}
       <Modal visible={passwordModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>تغيير كلمة المرور</Text>
-            
+
             <TextInput
               style={styles.modalInput}
               placeholder="كلمة المرور الحالية"
@@ -265,7 +314,7 @@ export default function ProfileScreen() {
               value={passwordData.confirmPassword}
               onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })}
             />
-            
+
             <View style={styles.modalButtons}>
               <Button
                 title="إلغاء"
@@ -383,6 +432,24 @@ const styles = StyleSheet.create({
   unverified: {
     color: colors.danger,
   },
+  activeStatus: {
+    color: colors.success,
+  },
+  inactiveStatus: {
+    color: colors.danger,
+  },
+  onlineStatus: {
+    color: colors.success,
+  },
+  offlineStatus: {
+    color: colors.textDisabled,
+  },
+  availableStatus: {
+    color: colors.success,
+  },
+  unavailableStatus: {
+    color: colors.danger,
+  },
   logoutButton: {
     marginHorizontal: 16,
     marginBottom: 32,
@@ -423,5 +490,22 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
+  },
+
+
+  availableStatus: {
+    color: colors.success,
+  },
+  unavailableStatus: {
+    color: colors.danger,
+  },
+  onlineStatus: {
+    color: colors.success,
+  },
+  offlineStatus: {
+    color: colors.textDisabled,
+  },
+  statusTextValue: {
+    fontWeight: typography.bold,
   },
 });

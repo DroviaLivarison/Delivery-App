@@ -1,3 +1,5 @@
+// src/api/driverService.js - النسخة النهائية المعدلة بالكامل
+
 import apiClient from './client';
 import { getSecureItem, saveSecureItem, deleteSecureItem } from '../utils/storage';
 
@@ -10,7 +12,18 @@ class DriverService {
   async getProfile() {
     try {
       const response = await apiClient.get(`${this.baseUrl}/profile`);
+      console.log('📊 Profile API response:', JSON.stringify(response.data, null, 2));
       const user = this.normalizeUser(response.data.data);
+      console.log('📊 Normalized user:', {
+        id: user?.id,
+        name: user?.name,
+        role: user?.role,
+        isActive: user?.isActive,
+        isVerified: user?.isVerified,
+        isAvailable: user?.isAvailable,
+        isOnline: user?.isOnline,
+        statusText: user?.statusText
+      });
       this.cachedAvailability = user?.isAvailable || false;
       return user;
     } catch (error) {
@@ -48,27 +61,72 @@ class DriverService {
     }
   }
 
-  async toggleAvailability(isOnline) {
+  // ✅ تعديل: تبديل حالة التوفر فقط (isAvailable)
+  async toggleAvailability(isAvailable) {
     try {
-      console.log('📤 Toggling availability:', { isOnline: isOnline });
-      
-      const response = await apiClient.put(`${this.baseUrl}/profile/availability`, {
-        isOnline: isOnline,
-        isAvailable: isOnline
+      console.log('📤 Toggling availability:', { isAvailable });
+
+      const response = await apiClient.put(`${this.baseUrl}/availability`, {
+        isAvailable: isAvailable
       });
-      
-      console.log('✅ Toggle response:', response.data);
-      
+
+      console.log('✅ Toggle availability response:', response.data);
+
       if (response.data?.success) {
-        this.cachedAvailability = isOnline;
+        this.cachedAvailability = isAvailable;
       }
-      
+
       return { success: true, data: response.data };
     } catch (error) {
       console.error('❌ Toggle availability error:', error);
       return {
         success: false,
         message: error.response?.data?.message || 'فشل تغيير حالة التوفر'
+      };
+    }
+  }
+
+  /**
+   * ✅ تبديل حالة الاتصال فقط (isOnline)
+   * يستخدم endpoint /driver/online
+   */
+  async toggleOnline(isOnline) {
+    try {
+      console.log('📤 Toggling online status:', { isOnline });
+
+      const response = await apiClient.put(`${this.baseUrl}/online`, {
+        isOnline: isOnline
+      });
+
+      console.log('✅ Toggle online response:', response.data);
+
+      if (response.data?.success) {
+        return { success: true, data: response.data.data };
+      }
+
+      return { success: false, message: 'فشل تغيير حالة الاتصال' };
+    } catch (error) {
+      console.error('❌ Toggle online error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تغيير حالة الاتصال'
+      };
+    }
+  }
+
+
+  // ✅ جديد: جلب الحالة التفصيلية للمندوب
+  async getDetailedStatus() {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/status`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Get detailed status error:', error);
+      return {
+        isOnline: false,
+        isAvailable: false,
+        hasActiveOrder: false,
+        statusText: 'غير متصل 📴'
       };
     }
   }
@@ -119,28 +177,35 @@ class DriverService {
   async getAvailableOrders() {
     try {
       console.log('🔄 Fetching available orders from /orders/available');
-      
+
       const response = await apiClient.get(`${this.baseUrl}/orders/available`);
-      
+
       console.log('📦 Available orders API response:', JSON.stringify(response.data, null, 2));
-      
+
       let orders = [];
       let stats = {};
       let isAvailable = false;
       let isOnline = false;
-      
+
       if (response.data?.success && response.data?.data) {
         orders = response.data.data.orders || [];
         stats = response.data.data.stats || {};
-        isAvailable = response.data.data.isAvailable || false;
-        isOnline = response.data.data.isOnline || false;
+
+        // ✅ قراءة حالة المندوب من API
+        if (response.data.data.driverStatus) {
+          isAvailable = response.data.data.driverStatus.isAvailable || false;
+          isOnline = response.data.data.driverStatus.isOnline || false;
+        } else {
+          isAvailable = response.data.data.isAvailable || false;
+          isOnline = response.data.data.isOnline || false;
+        }
       }
-      
+
       console.log(`✅ Found ${orders.length} available orders`);
       console.log(`📊 Driver status from server: isAvailable=${isAvailable}, isOnline=${isOnline}`);
-      
+
       this.cachedAvailability = isAvailable;
-      
+
       return {
         orders: this.normalizeOrders(orders),
         stats: stats,
@@ -157,17 +222,16 @@ class DriverService {
     try {
       console.log('🔄 Fetching active order from /orders/active');
       const response = await apiClient.get(`${this.baseUrl}/orders/active`);
-      
+
       if (!response.data?.data) {
         console.log('📭 No active order found');
         return null;
       }
-      
+
       const order = this.normalizeOrder(response.data.data.order || response.data.data);
       console.log('✅ Active order found:', order?.id);
       return order;
     } catch (error) {
-      // ✅ معالجة خاصة لخطأ 500 - نعتبر أنه لا يوجد طلب نشط
       if (error.response?.status === 500) {
         console.log('⚠️ Backend error (500) on getActiveOrder - treating as no active order');
         return null;
@@ -229,10 +293,8 @@ class DriverService {
     }
   }
 
-  // ✅ الدالة الكاملة المعدلة لـ updateOrderStatus
   async updateOrderStatus(orderId, status, location = null) {
     try {
-      // ✅ التحقق من صحة الحالة
       const validStatuses = ['pending', 'accepted', 'ready', 'picked', 'delivered', 'cancelled'];
       if (!validStatuses.includes(status)) {
         console.error('❌ Invalid status:', status);
@@ -241,11 +303,9 @@ class DriverService {
           message: `حالة غير صالحة: ${status}`
         };
       }
-      
-      // ✅ بناء الـ payload
+
       const payload = { status };
-      
-      // ✅ فقط أضف location إذا كان object صالح وله الخصائص المطلوبة
+
       if (location && typeof location === 'object') {
         if (location.latitude && location.longitude) {
           payload.location = {
@@ -253,17 +313,11 @@ class DriverService {
             longitude: location.longitude
           };
           console.log('📍 Adding location to payload:', payload.location);
-        } else if (location.coordinates || location.lat || location.lng) {
-          // دعم صيغ مختلفة للموقع
-          payload.location = {
-            latitude: location.latitude || location.lat || location.coordinates?.[1],
-            longitude: location.longitude || location.lng || location.coordinates?.[0]
-          };
         }
       }
-      
+
       console.log('📤 Updating order status:', { orderId, status, hasLocation: !!payload.location });
-      
+
       const response = await apiClient.put(`${this.baseUrl}/orders/${orderId}/status`, payload);
       return { success: true, data: response.data };
     } catch (error) {
@@ -350,6 +404,36 @@ class DriverService {
     }
   }
 
+  async checkAccountStatus() {
+    try {
+      const profile = await this.getProfile();
+      if (!profile) return { isActive: true, isVerified: true, isOnline: false, isAvailable: false };
+
+      return {
+        isActive: profile.isActive === true,
+        isVerified: profile.isVerified === true,
+        isOnline: profile.isOnline === true,
+        isAvailable: profile.isAvailable === true
+      };
+    } catch (error) {
+      console.error('Check account status error:', error);
+      return { isActive: true, isVerified: true, isOnline: false, isAvailable: false };
+    }
+  }
+
+  async updateAccountStatus(isActive) {
+    try {
+      const response = await apiClient.put(`${this.baseUrl}/profile/status`, { isActive });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Update account status error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تحديث حالة الحساب'
+      };
+    }
+  }
+
   // ========== دوال مساعدة ==========
 
   normalizeOrder(order) {
@@ -373,23 +457,70 @@ class DriverService {
     return (orders || []).map(order => this.normalizeOrder(order));
   }
 
+  // ✅ دالة مساعدة لنص الحالة
+  getDriverStatusText(driver) {
+    if (driver.hasActiveOrder) return 'مشغول (في توصيلة)';
+    if (driver.isOnline && driver.isAvailable) return 'متاح ✅';
+    if (driver.isOnline && !driver.isAvailable) return 'غير متاح ⛔';
+    return 'غير متصل 📴';
+  }
+
+
+
   normalizeUser(user) {
     if (!user) return null;
+
+    console.log('📊 Raw user data:', JSON.stringify(user, null, 2));
+
+    const isActiveValue = user.isActive === true;
+    const isVerifiedValue = user.isVerified === true;
+    const isOnlineValue = user.isOnline === true;
+    const isAvailableValue = user.driverInfo?.isAvailable === true;
+
+    console.log('📊 Status values:', {
+      raw_isOnline: user.isOnline,
+      raw_isAvailable: user.driverInfo?.isAvailable,
+      raw_isActive: user.isActive,
+      raw_isVerified: user.isVerified,
+      computed_isActive: isActiveValue,
+      computed_isVerified: isVerifiedValue,
+      computed_isOnline: isOnlineValue,
+      computed_isAvailable: isAvailableValue
+    });
 
     return {
       ...user,
       id: user._id,
       fullName: user.name,
+      name: user.name,
       avatar: user.image,
+      image: user.image,
       phone: user.phone,
       email: user.email,
-      isAvailable: user.driverInfo?.isAvailable || false,
+      isActive: isActiveValue,
+      isVerified: isVerifiedValue,
+      isOnline: isOnlineValue,
+      isAvailable: isAvailableValue,
+
+      statusText: this.getDriverStatusText({
+        isOnline: isOnlineValue,
+        isAvailable: isAvailableValue,
+        hasActiveOrder: false
+      }),
+
       totalDeliveries: user.driverInfo?.totalDeliveries || 0,
       earnings: user.driverInfo?.earnings || 0,
       rating: user.driverInfo?.rating || 0,
-      totalRatings: user.driverInfo?.totalRatings || 0
+      totalRatings: user.driverInfo?.totalRatings || 0,
+      currentLocation: user.driverInfo?.currentLocation,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      role: user.role || 'driver'
     };
   }
+
+
+
 
   getStatusText(status) {
     const statusMap = {
