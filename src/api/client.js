@@ -1,8 +1,38 @@
-// src/api/client.js - الإصدار المصحح
+// src/api/client.js - المصدر الرئيسي للإعدادات
 import axios from 'axios';
+import { Platform } from 'react-native';
 import { getSecureItem, saveSecureItem, deleteSecureItem } from '../utils/storage';
 
-const API_BASE_URL = 'https://backend-walid-yahaya.onrender.com/api/v1';
+// 👇 غير هذا السطر فقط للتبديل
+const USE_LOCAL = true;  // true = localhost, false = production
+
+// 👇 نفس IP المستخدم في client.js (غيره عند الحاجة)
+const YOUR_COMPUTER_IP = '10.221.221.136';
+
+// تصدير الإعدادات لاستخدامها في ملفات أخرى
+export const CONFIG = {
+  USE_LOCAL,
+  YOUR_COMPUTER_IP,
+  getLocalApiUrl: () => {
+    return `http://${YOUR_COMPUTER_IP}:3001/api/v1`;
+  },
+  getLocalSocketUrl: () => {
+    return `http://${YOUR_COMPUTER_IP}:3001`;
+  },
+  PROD_API: 'https://backend-walid-yahaya.onrender.com/api/v1',
+  PROD_SOCKET: 'https://backend-walid-yahaya.onrender.com',
+  get API_URL() {
+    return this.USE_LOCAL ? this.getLocalApiUrl() : this.PROD_API;
+  },
+  get SOCKET_URL() {
+    return this.USE_LOCAL ? this.getLocalSocketUrl() : this.PROD_SOCKET;
+  }
+};
+
+const API_BASE_URL = CONFIG.API_URL;
+
+console.log(`📡 Using API: ${API_BASE_URL}`);
+console.log(`🖥️  Computer IP: ${CONFIG.YOUR_COMPUTER_IP}`);
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

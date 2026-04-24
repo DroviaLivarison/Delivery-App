@@ -28,22 +28,17 @@ export default function ProfileScreen() {
   const { user, logout, updateProfile, stats, setStats } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
     email: user?.email || '',
-  });
-
-  const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
 
-  // ✅ جلب حالة الحساب
   const loadAccountStatus = async () => {
     const status = await DriverService.checkAccountStatus();
     setAccountStatus(status);
@@ -81,42 +76,54 @@ export default function ProfileScreen() {
 
   const handleUpdateProfile = async () => {
     setLoading(true);
-    const success = await updateProfile(formData);
+    
+    // تحديث الملف الشخصي أولاً
+    const profileSuccess = await updateProfile({
+      name: formData.name,
+      phone: formData.phone,
+      email: formData.email,
+    });
+    
+    // إذا كان هناك طلب تغيير كلمة المرور
+    let passwordSuccess = true;
+    if (formData.newPassword && formData.newPassword.trim()) {
+      if (formData.newPassword !== formData.confirmPassword) {
+        Alert.alert('خطأ', 'كلمة المرور الجديدة غير متطابقة');
+        setLoading(false);
+        return;
+      }
+      
+      if (formData.newPassword.length < 6) {
+        Alert.alert('خطأ', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+        setLoading(false);
+        return;
+      }
+      
+      const result = await changePassword(
+        formData.currentPassword,
+        formData.newPassword,
+        formData.confirmPassword
+      );
+      passwordSuccess = result.success;
+      if (!passwordSuccess) {
+        Alert.alert('خطأ', result.message);
+      }
+    }
+    
     setLoading(false);
 
-    if (success) {
-      Alert.alert('نجاح', 'تم تحديث الملف الشخصي');
+    if (profileSuccess && passwordSuccess) {
+      Alert.alert('نجاح', 'تم تحديث الملف الشخصي' + (formData.newPassword ? ' وتغيير كلمة المرور' : ''));
       setEditModalVisible(false);
-    } else {
-      Alert.alert('خطأ', 'فشل تحديث الملف');
-    }
-  };
-
-  const handleChangePassword = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert('خطأ', 'كلمة المرور الجديدة غير متطابقة');
-      return;
-    }
-
-    if (passwordData.newPassword.length < 6) {
-      Alert.alert('خطأ', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      return;
-    }
-
-    setLoading(true);
-    const result = await changePassword(
-      passwordData.currentPassword,
-      passwordData.newPassword,
-      passwordData.confirmPassword
-    );
-    setLoading(false);
-
-    if (result.success) {
-      Alert.alert('نجاح', 'تم تغيير كلمة المرور');
-      setPasswordModalVisible(false);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } else {
-      Alert.alert('خطأ', result.message);
+      // إعادة تعيين حقول كلمة المرور
+      setFormData(prev => ({
+        ...prev,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      }));
+    } else if (!profileSuccess) {
+      Alert.alert('خطأ', 'فشل تحديث الملف الشخصي');
     }
   };
 
@@ -146,30 +153,23 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
+          <TouchableOpacity style={styles.avatar} onPress={() => setEditModalVisible(true)}>
             <Text style={styles.avatarText}>{user?.name?.charAt(0) || 'م'}</Text>
-          </View>
+            <View style={styles.editAvatarBadge}>
+              <Ionicons name="camera" size={14} color={colors.surface} />
+            </View>
+          </TouchableOpacity>
           <Text style={styles.name}>{user?.name || 'مندوب'}</Text>
           <Text style={styles.phone}>{user?.phone}</Text>
           <Text style={styles.email}>{user?.email || 'البريد الإلكتروني غير مضاف'}</Text>
 
-          <View style={styles.editButtons}>
-            <Button
-              title="تعديل الملف"
-              onPress={() => setEditModalVisible(true)}
-              size="small"
-              style={styles.editButton}
-            />
-            <Button
-              title="تغيير كلمة المرور"
-              onPress={() => setPasswordModalVisible(true)}
-              variant="outline"
-              size="small"
-              style={styles.editButton}
-            />
-          </View>
+          <TouchableOpacity style={styles.editProfileButton} onPress={() => setEditModalVisible(true)}>
+            <Ionicons name="create-outline" size={18} color={colors.primary} />
+            <Text style={styles.editProfileText}>تعديل الملف الشخصي</Text>
+          </TouchableOpacity>
         </View>
 
+        {/* ✅ بطاقة الإحصائيات */}
         <View style={styles.statsContainer}>
           <StatCard icon="today-outline" value={stats.todayOrders} label="طلبات اليوم" />
           <StatCard icon="time-outline" value={stats.totalOrders} label="إجمالي الطلبات" />
@@ -177,62 +177,85 @@ export default function ProfileScreen() {
           <StatCard icon="cash-outline" value={`${stats.earnings}`} label="الأرباح" />
         </View>
 
+        {/* ✅ بطاقة معلومات الحساب */}
         <Card style={styles.infoCard}>
-          <Text style={styles.infoTitle}>معلومات الحساب</Text>
+          <Text style={styles.infoTitle}>📋 معلومات الحساب</Text>
+          
           <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <Ionicons name="person-outline" size={18} color={colors.textSecondary} />
+            </View>
             <Text style={styles.infoLabel}>نوع الحساب:</Text>
             <Text style={styles.infoValue}>مندوب توصيل</Text>
           </View>
 
-          {/* ✅ عرض حالة التوثيق */}
           <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <Ionicons name="checkmark-done-circle-outline" size={18} color={colors.textSecondary} />
+            </View>
             <Text style={styles.infoLabel}>التوثيق:</Text>
             <Text style={[styles.infoValue, accountStatus.isVerified ? styles.verified : styles.unverified]}>
               {accountStatus.isVerified ? 'موثق ✓' : 'غير موثق'}
             </Text>
           </View>
 
-          {/* ✅ عرض حالة الحساب (نشط/غير نشط) */}
           <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.textSecondary} />
+            </View>
             <Text style={styles.infoLabel}>حالة الحساب:</Text>
             <Text style={[styles.infoValue, accountStatus.isActive ? styles.activeStatus : styles.inactiveStatus]}>
               {accountStatus.isActive ? 'نشط ✓' : 'غير نشط ✗'}
             </Text>
           </View>
 
-          {/* ✅ عرض حالة الاتصال */}
           <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <Ionicons name="wifi-outline" size={18} color={colors.textSecondary} />
+            </View>
             <Text style={styles.infoLabel}>حالة الاتصال:</Text>
             <Text style={[styles.infoValue, user?.isOnline ? styles.onlineStatus : styles.offlineStatus]}>
               {user?.isOnline ? 'متصل 🟢' : 'غير متصل ⚫'}
             </Text>
           </View>
 
-          {/* ✅ عرض حالة التوفر للتوصيل */}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>حالة الاتصال:</Text>
-            <Text style={[styles.infoValue, user?.isOnline ? styles.onlineStatus : styles.offlineStatus]}>
-              {user?.isOnline ? 'متصل 🟢' : 'غير متصل ⚫'}
+            <View style={styles.infoIcon}>
+              <Ionicons name="checkbox-outline" size={18} color={colors.textSecondary} />
+            </View>
+            <Text style={styles.infoLabel}>حالة التوفر:</Text>
+            <Text style={[styles.infoValue, user?.isAvailable ? styles.availableStatus : styles.unavailableStatus]}>
+              {user?.isAvailable ? 'متاح ✅' : 'غير متاح ⛔'}
             </Text>
           </View>
 
           <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
+            </View>
             <Text style={styles.infoLabel}>تاريخ الانضمام:</Text>
             <Text style={styles.infoValue}>
-              {new Date(user?.createdAt).toLocaleDateString('ar')}
+              {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('ar') : 'غير محدد'}
             </Text>
           </View>
 
-          {/* ✅ عرض نص الحالة الكامل */}
+          <View style={styles.divider} />
+
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>الحالة:</Text>
-            <Text style={[styles.infoValue, styles.statusTextValue]}>
-              {user?.statusText || 'غير محدد'}
-            </Text>
+            <View style={styles.infoIcon}>
+              <Ionicons name="stats-chart-outline" size={18} color={colors.textSecondary} />
+            </View>
+            <Text style={styles.infoLabel}>إجمالي الأرباح:</Text>
+            <Text style={[styles.infoValue, styles.totalEarnings]}>{stats.earnings} د.ع</Text>
           </View>
 
-
-
+          <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <Ionicons name="star-half-outline" size={18} color={colors.textSecondary} />
+            </View>
+            <Text style={styles.infoLabel}>متوسط التقييم:</Text>
+            <Text style={styles.infoValue}>{stats.rating} / 5</Text>
+          </View>
         </Card>
 
         <Button
@@ -240,94 +263,124 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           variant="danger"
           style={styles.logoutButton}
+          icon={<Ionicons name="log-out-outline" size={20} color={colors.surface} />}
         />
       </ScrollView>
 
-      {/* مودال تعديل الملف الشخصي */}
+      {/* ✅ مودال تعديل الملف الشخصي (مع إمكانية تغيير كلمة المرور داخله) */}
       <Modal visible={editModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>تعديل الملف الشخصي</Text>
-
-            <TextInput
-              style={styles.modalInput}
-              placeholder="الاسم"
-              value={formData.name}
-              onChangeText={(text) => setFormData({ ...formData, name: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="رقم الهاتف"
-              value={formData.phone}
-              onChangeText={(text) => setFormData({ ...formData, phone: text })}
-              keyboardType="phone-pad"
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="البريد الإلكتروني"
-              value={formData.email}
-              onChangeText={(text) => setFormData({ ...formData, email: text })}
-              keyboardType="email-address"
-            />
-
-            <View style={styles.modalButtons}>
-              <Button
-                title="إلغاء"
-                onPress={() => setEditModalVisible(false)}
-                variant="outline"
-                style={styles.modalButton}
-              />
-              <Button
-                title="حفظ"
-                onPress={handleUpdateProfile}
-                style={styles.modalButton}
-              />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>تعديل الملف الشخصي</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
 
-      {/* مودال تغيير كلمة المرور */}
-      <Modal visible={passwordModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>تغيير كلمة المرور</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.sectionLabel}>المعلومات الأساسية</Text>
+              
+              <View style={styles.inputContainer}>
+                <Ionicons name="person-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="الاسم"
+                  placeholderTextColor={colors.textHint}
+                  value={formData.name}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                />
+              </View>
 
-            <TextInput
-              style={styles.modalInput}
-              placeholder="كلمة المرور الحالية"
-              secureTextEntry
-              value={passwordData.currentPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, currentPassword: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="كلمة المرور الجديدة"
-              secureTextEntry
-              value={passwordData.newPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="تأكيد كلمة المرور الجديدة"
-              secureTextEntry
-              value={passwordData.confirmPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })}
-            />
+              <View style={styles.inputContainer}>
+                <Ionicons name="call-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="رقم الهاتف"
+                  placeholderTextColor={colors.textHint}
+                  value={formData.phone}
+                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                  keyboardType="phone-pad"
+                />
+              </View>
 
-            <View style={styles.modalButtons}>
-              <Button
-                title="إلغاء"
-                onPress={() => setPasswordModalVisible(false)}
-                variant="outline"
-                style={styles.modalButton}
-              />
-              <Button
-                title="تغيير"
-                onPress={handleChangePassword}
-                style={styles.modalButton}
-              />
-            </View>
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="البريد الإلكتروني"
+                  placeholderTextColor={colors.textHint}
+                  value={formData.email}
+                  onChangeText={(text) => setFormData({ ...formData, email: text })}
+                  keyboardType="email-address"
+                />
+              </View>
+
+              <View style={styles.divider} />
+
+              <Text style={styles.sectionLabel}>🔐 تغيير كلمة المرور (اختياري)</Text>
+              
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="كلمة المرور الحالية"
+                  placeholderTextColor={colors.textHint}
+                  secureTextEntry
+                  value={formData.currentPassword}
+                  onChangeText={(text) => setFormData({ ...formData, currentPassword: text })}
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Ionicons name="key-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="كلمة المرور الجديدة"
+                  placeholderTextColor={colors.textHint}
+                  secureTextEntry
+                  value={formData.newPassword}
+                  onChangeText={(text) => setFormData({ ...formData, newPassword: text })}
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Ionicons name="checkmark-circle-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="تأكيد كلمة المرور الجديدة"
+                  placeholderTextColor={colors.textHint}
+                  secureTextEntry
+                  value={formData.confirmPassword}
+                  onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
+                />
+              </View>
+
+              <View style={styles.modalButtons}>
+                <Button
+                  title="إلغاء"
+                  onPress={() => {
+                    setEditModalVisible(false);
+                    setFormData({
+                      name: user?.name || '',
+                      phone: user?.phone || '',
+                      email: user?.email || '',
+                      currentPassword: '',
+                      newPassword: '',
+                      confirmPassword: '',
+                    });
+                  }}
+                  variant="outline"
+                  style={styles.modalButton}
+                />
+                <Button
+                  title="حفظ التغييرات"
+                  onPress={handleUpdateProfile}
+                  style={styles.modalButton}
+                  icon={<Ionicons name="save-outline" size={18} color={colors.surface} />}
+                />
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -351,11 +404,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+    position: 'relative',
   },
   avatarText: {
     fontSize: 40,
     fontWeight: typography.bold,
     color: colors.surface,
+  },
+  editAvatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.primaryDark,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
   },
   name: {
     fontSize: typography.h4,
@@ -373,12 +440,20 @@ const styles = StyleSheet.create({
     color: colors.textDisabled,
     marginBottom: 12,
   },
-  editButtons: {
+  editProfileButton: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  editButton: {
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.primaryLight + '15',
+    marginTop: 8,
+  },
+  editProfileText: {
+    fontSize: typography.body2,
+    color: colors.primary,
+    fontWeight: typography.medium,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -387,6 +462,11 @@ const styles = StyleSheet.create({
     margin: 16,
     backgroundColor: colors.surface,
     borderRadius: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   statCard: {
     alignItems: 'center',
@@ -410,46 +490,45 @@ const styles = StyleSheet.create({
     fontSize: typography.body1,
     fontWeight: typography.bold,
     color: colors.text,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   infoRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoIcon: {
+    width: 28,
+    marginRight: 8,
   },
   infoLabel: {
     fontSize: typography.body2,
     color: colors.textSecondary,
+    width: 100,
   },
   infoValue: {
     fontSize: typography.body2,
     color: colors.text,
     fontWeight: typography.medium,
+    flex: 1,
   },
-  verified: {
+  divider: {
+    height: 1,
+    backgroundColor: colors.divider,
+    marginVertical: 12,
+  },
+  totalEarnings: {
     color: colors.success,
+    fontWeight: typography.bold,
   },
-  unverified: {
-    color: colors.danger,
-  },
-  activeStatus: {
-    color: colors.success,
-  },
-  inactiveStatus: {
-    color: colors.danger,
-  },
-  onlineStatus: {
-    color: colors.success,
-  },
-  offlineStatus: {
-    color: colors.textDisabled,
-  },
-  availableStatus: {
-    color: colors.success,
-  },
-  unavailableStatus: {
-    color: colors.danger,
-  },
+  verified: { color: colors.success },
+  unverified: { color: colors.danger },
+  activeStatus: { color: colors.success },
+  inactiveStatus: { color: colors.danger },
+  onlineStatus: { color: colors.success },
+  offlineStatus: { color: colors.textDisabled },
+  availableStatus: { color: colors.success },
+  unavailableStatus: { color: colors.danger },
   logoutButton: {
     marginHorizontal: 16,
     marginBottom: 32,
@@ -462,50 +541,60 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 20,
     width: '90%',
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
   },
   modalTitle: {
     fontSize: typography.h5,
     fontWeight: typography.bold,
     color: colors.text,
-    textAlign: 'center',
-    marginBottom: 16,
   },
-  modalInput: {
+  sectionLabel: {
+    fontSize: typography.body2,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
-    padding: 12,
     marginBottom: 12,
+    backgroundColor: colors.surfaceVariant,
+  },
+  inputIcon: {
+    paddingHorizontal: 12,
+  },
+  modalInput: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     fontSize: typography.body2,
+    color: colors.text,
     textAlign: 'right',
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-    marginTop: 8,
+    marginTop: 20,
+    marginBottom: 10,
   },
   modalButton: {
     flex: 1,
-  },
-
-
-  availableStatus: {
-    color: colors.success,
-  },
-  unavailableStatus: {
-    color: colors.danger,
-  },
-  onlineStatus: {
-    color: colors.success,
-  },
-  offlineStatus: {
-    color: colors.textDisabled,
-  },
-  statusTextValue: {
-    fontWeight: typography.bold,
   },
 });

@@ -1,5 +1,9 @@
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://backend-walid-yahaya.onrender.com/api/v1';
-export const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://backend-walid-yahaya.onrender.com';
+// src/utils/constants.js - يستورد الإعدادات من client.js
+import { CONFIG } from '../api/client';
+
+// استخدام نفس الروابط من client.js
+export const API_BASE_URL = CONFIG.API_URL;
+export const SOCKET_URL = CONFIG.SOCKET_URL;
 
 // حالة الطلبات
 export const ORDER_STATUS = {
@@ -28,3 +32,7 @@ export const ORDER_STATUS_COLORS = {
   [ORDER_STATUS.DELIVERED]: '#4CAF50',
   [ORDER_STATUS.CANCELLED]: '#F44336',
 };
+
+// إعدادات إضافية
+export const MAPBOX_ACCESS_TOKEN = 'your_token_here';
+export const MAPBOX_STYLE_URL = 'mapbox://styles/mapbox/streets-v12';

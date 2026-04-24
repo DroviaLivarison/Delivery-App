@@ -16,9 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.yourcompany.driverapp",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "نحتاج إلى موقعك لتوصيل الطلبات",
-        "NSLocationAlwaysUsageDescription": "نحتاج إلى موقعك في الخلفية لتحديث حالة التوصيل",
-        "UIBackgroundModes": ["location", "fetch"]
+        "NSLocationWhenInUseUsageDescription": "نحتاج إلى موقعك لتوصيل الطلبات وإظهار طريقك",
+        "NSLocationAlwaysUsageDescription": "نحتاج إلى موقعك في الخلفية لتحديث حالة التوصيل حتى عندما يكون التطبيق مغلقاً",
+        "UIBackgroundModes": ["location", "fetch", "processing"]
       }
     },
     "android": {
@@ -30,8 +30,22 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
-      ]
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "WAKE_LOCK",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM"
+      ],
+      "foregroundService": {
+        "location": [
+          {
+            "notificationTitle": "🚚 خدمة التوصيل",
+            "notificationBody": "التطبيق يعمل في الخلفية لتحديث موقعك وتوصيل الطلبات",
+            "notificationColor": "#f64008"
+          }
+        ]
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -40,7 +54,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك لتوصيل الطلبات"
+          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك حتى في الخلفية لتوصيل الطلبات"
         }
       ],
       [
@@ -61,6 +75,12 @@
           "ios": {
             "deploymentTarget": "15.1"
           }
+        }
+      ],
+      [
+        "expo-background-fetch",
+        {
+          "minimumInterval": 60
         }
       ]
     ],

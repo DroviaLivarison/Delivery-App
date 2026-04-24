@@ -40,7 +40,6 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
-.env.example
 .github/workflows/build.yml
 .gitignore
 App.js
@@ -99,12 +98,6 @@ src/utils/storage.js
 
 <files>
 This section contains the contents of the repository's files.
-
-<file path=".env.example">
-# 1. إنشاء ملف نموذج للـ .env
-echo "MAPBOX_ACCESS_TOKEN=your_token_here" > .env.example
-echo "API_URL=https://backend-walid-yahaya.onrender.com/api/v1" >> .env.example
-</file>
 
 <file path=".gitignore">
 node_modules/
@@ -468,11 +461,41 @@ export default chatService;
 </file>
 
 <file path="src/api/client.js">
-// src/api/client.js - الإصدار المصحح
+// src/api/client.js - المصدر الرئيسي للإعدادات
 import axios from 'axios';
+import { Platform } from 'react-native';
 import { getSecureItem, saveSecureItem, deleteSecureItem } from '../utils/storage';
 
-const API_BASE_URL = 'https://backend-walid-yahaya.onrender.com/api/v1';
+// 👇 غير هذا السطر فقط للتبديل
+const USE_LOCAL = true;  // true = localhost, false = production
+
+// 👇 نفس IP المستخدم في client.js (غيره عند الحاجة)
+const YOUR_COMPUTER_IP = '10.221.221.136';
+
+// تصدير الإعدادات لاستخدامها في ملفات أخرى
+export const CONFIG = {
+  USE_LOCAL,
+  YOUR_COMPUTER_IP,
+  getLocalApiUrl: () => {
+    return `http://${YOUR_COMPUTER_IP}:3001/api/v1`;
+  },
+  getLocalSocketUrl: () => {
+    return `http://${YOUR_COMPUTER_IP}:3001`;
+  },
+  PROD_API: 'https://backend-walid-yahaya.onrender.com/api/v1',
+  PROD_SOCKET: 'https://backend-walid-yahaya.onrender.com',
+  get API_URL() {
+    return this.USE_LOCAL ? this.getLocalApiUrl() : this.PROD_API;
+  },
+  get SOCKET_URL() {
+    return this.USE_LOCAL ? this.getLocalSocketUrl() : this.PROD_SOCKET;
+  }
+};
+
+const API_BASE_URL = CONFIG.API_URL;
+
+console.log(`📡 Using API: ${API_BASE_URL}`);
+console.log(`🖥️  Computer IP: ${CONFIG.YOUR_COMPUTER_IP}`);
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -548,486 +571,6 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
-</file>
-
-<file path="src/api/driverService.js">
-// src/api/driverService.js - النسخة النهائية المعدلة
-
-import apiClient from './client';
-import { getSecureItem, saveSecureItem, deleteSecureItem } from '../utils/storage';
-
-class DriverService {
-  constructor() {
-    this.baseUrl = '/driver';
-    this.cachedAvailability = null;
-  }
-
-  async getProfile() {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/profile`);
-      console.log('📊 Profile API response:', JSON.stringify(response.data, null, 2));
-      const user = this.normalizeUser(response.data.data);
-      console.log('📊 Normalized user:', {
-        id: user?.id,
-        name: user?.name,
-        role: user?.role,
-        isActive: user?.isActive,
-        isVerified: user?.isVerified,
-        isAvailable: user?.isAvailable,
-        isOnline: user?.isOnline
-      });
-      this.cachedAvailability = user?.isAvailable || false;
-      return user;
-    } catch (error) {
-      console.error('Get profile error:', error);
-      return null;
-    }
-  }
-
-  async updateProfile(data) {
-    try {
-      const response = await apiClient.put(`${this.baseUrl}/profile`, data);
-      return response.data.data;
-    } catch (error) {
-      console.error('Update profile error:', error);
-      return null;
-    }
-  }
-
-  async updateAvatar(imageFile) {
-    try {
-      const formData = new FormData();
-      formData.append('image', {
-        uri: imageFile,
-        type: 'image/jpeg',
-        name: 'avatar.jpg'
-      });
-
-      const response = await apiClient.put(`${this.baseUrl}/profile/avatar`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      return response.data.data;
-    } catch (error) {
-      console.error('Update avatar error:', error);
-      return null;
-    }
-  }
-
-  async toggleAvailability(isOnline) {
-    try {
-      console.log('📤 Toggling availability:', { isOnline: isOnline });
-
-      const response = await apiClient.put(`${this.baseUrl}/profile/availability`, {
-        isOnline: isOnline,
-        isAvailable: isOnline
-      });
-
-      console.log('✅ Toggle response:', response.data);
-
-      if (response.data?.success) {
-        this.cachedAvailability = isOnline;
-      }
-
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('❌ Toggle availability error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل تغيير حالة التوفر'
-      };
-    }
-  }
-
-  async updateLocation(latitude, longitude, orderId = null) {
-    try {
-      const response = await apiClient.put(`${this.baseUrl}/location`, {
-        latitude,
-        longitude,
-        orderId
-      });
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Update location error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل تحديث الموقع'
-      };
-    }
-  }
-
-  async getCurrentLocation() {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/location/current`);
-      return { success: true, data: response.data.data };
-    } catch (error) {
-      console.error('Get current location error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل جلب الموقع الحالي'
-      };
-    }
-  }
-
-  async getOrderLocation(orderId) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/location/order/${orderId}`);
-      return { success: true, data: response.data.data };
-    } catch (error) {
-      console.error('Get order location error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل جلب موقع الطلب'
-      };
-    }
-  }
-
-  async getAvailableOrders() {
-    try {
-      console.log('🔄 Fetching available orders from /orders/available');
-
-      const response = await apiClient.get(`${this.baseUrl}/orders/available`);
-
-      console.log('📦 Available orders API response:', JSON.stringify(response.data, null, 2));
-
-      let orders = [];
-      let stats = {};
-      let isAvailable = false;
-      let isOnline = false;
-
-      if (response.data?.success && response.data?.data) {
-        orders = response.data.data.orders || [];
-        stats = response.data.data.stats || {};
-        isAvailable = response.data.data.isAvailable || false;
-        isOnline = response.data.data.isOnline || false;
-      }
-
-      console.log(`✅ Found ${orders.length} available orders`);
-      console.log(`📊 Driver status from server: isAvailable=${isAvailable}, isOnline=${isOnline}`);
-
-      this.cachedAvailability = isAvailable;
-
-      return {
-        orders: this.normalizeOrders(orders),
-        stats: stats,
-        isAvailable: isAvailable,
-        isOnline: isOnline
-      };
-    } catch (error) {
-      console.error('❌ Get available orders error:', error);
-      return { orders: [], stats: {}, isAvailable: false, isOnline: false };
-    }
-  }
-
-  async getActiveOrder() {
-    try {
-      console.log('🔄 Fetching active order from /orders/active');
-      const response = await apiClient.get(`${this.baseUrl}/orders/active`);
-
-      if (!response.data?.data) {
-        console.log('📭 No active order found');
-        return null;
-      }
-
-      const order = this.normalizeOrder(response.data.data.order || response.data.data);
-      console.log('✅ Active order found:', order?.id);
-      return order;
-    } catch (error) {
-      if (error.response?.status === 500) {
-        console.log('⚠️ Backend error (500) on getActiveOrder - treating as no active order');
-        return null;
-      }
-      console.error('Get active order error:', error);
-      return null;
-    }
-  }
-
-  async getOrderHistory(page = 1, limit = 20) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/orders/history`, {
-        params: { page, limit }
-      });
-      return {
-        orders: this.normalizeOrders(response.data.data?.orders || []),
-        pagination: response.data.data?.pagination || { page, limit, total: 0, pages: 0 },
-        stats: response.data.data?.stats || { totalOrders: 0, totalEarnings: 0 }
-      };
-    } catch (error) {
-      console.error('Get order history error:', error);
-      return { orders: [], pagination: { page, limit, total: 0, pages: 0 }, stats: {} };
-    }
-  }
-
-  async getOrderDetails(orderId) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/orders/${orderId}`);
-      return this.normalizeOrder(response.data.data?.order || response.data.data);
-    } catch (error) {
-      console.error('Get order details error:', error);
-      return null;
-    }
-  }
-
-  async acceptOrder(orderId) {
-    try {
-      const response = await apiClient.put(`${this.baseUrl}/orders/${orderId}/accept`);
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Accept order error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل قبول الطلب'
-      };
-    }
-  }
-
-  async rejectOrder(orderId, reason = '') {
-    try {
-      const response = await apiClient.put(`${this.baseUrl}/orders/${orderId}/reject`, { reason });
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Reject order error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل رفض الطلب'
-      };
-    }
-  }
-
-  async updateOrderStatus(orderId, status, location = null) {
-    try {
-      const validStatuses = ['pending', 'accepted', 'ready', 'picked', 'delivered', 'cancelled'];
-      if (!validStatuses.includes(status)) {
-        console.error('❌ Invalid status:', status);
-        return {
-          success: false,
-          message: `حالة غير صالحة: ${status}`
-        };
-      }
-
-      const payload = { status };
-
-      if (location && typeof location === 'object') {
-        if (location.latitude && location.longitude) {
-          payload.location = {
-            latitude: location.latitude,
-            longitude: location.longitude
-          };
-          console.log('📍 Adding location to payload:', payload.location);
-        }
-      }
-
-      console.log('📤 Updating order status:', { orderId, status, hasLocation: !!payload.location });
-
-      const response = await apiClient.put(`${this.baseUrl}/orders/${orderId}/status`, payload);
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('❌ Update order status error:', {
-        status: error.response?.status,
-        message: error.response?.data?.message,
-        data: error.response?.data
-      });
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل تحديث الحالة'
-      };
-    }
-  }
-
-  async startDelivery(orderId) {
-    try {
-      const response = await apiClient.post(`${this.baseUrl}/orders/${orderId}/start`);
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Start delivery error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل بدء التوصيل'
-      };
-    }
-  }
-
-  async completeOrder(orderId, signature = null, deliveryPhoto = null) {
-    try {
-      const response = await apiClient.post(`${this.baseUrl}/orders/${orderId}/complete`, {
-        signature,
-        deliveryPhoto
-      });
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Complete order error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل إنهاء الطلب'
-      };
-    }
-  }
-
-  async getEarnings(period = 'week') {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/earnings`, { params: { period } });
-      return response.data.data;
-    } catch (error) {
-      console.error('Get earnings error:', error);
-      return { earnings: [], totals: { totalOrders: 0, totalEarnings: 0 } };
-    }
-  }
-
-  async getEarningsHistory(page = 1, limit = 20) {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/earnings/history`, {
-        params: { page, limit }
-      });
-      return response.data.data;
-    } catch (error) {
-      console.error('Get earnings history error:', error);
-      return { earnings: [], stats: {}, pagination: { page, limit, total: 0, pages: 0 } };
-    }
-  }
-
-  async getStats() {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/stats`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Get stats error:', error);
-      return null;
-    }
-  }
-
-  async getPerformance() {
-    try {
-      const response = await apiClient.get(`${this.baseUrl}/performance`);
-      return response.data.data;
-    } catch (error) {
-      console.error('Get performance error:', error);
-      return null;
-    }
-  }
-
-  // ✅ التحقق من حالة الحساب (نشط/غير نشط)
-  async checkAccountStatus() {
-    try {
-      const profile = await this.getProfile();
-      if (!profile) return { isActive: true, isVerified: true, isOnline: false, isAvailable: false };
-
-      return {
-        isActive: profile.isActive === true,
-        isVerified: profile.isVerified === true,
-        isOnline: profile.isOnline === true,
-        isAvailable: profile.isAvailable === true
-      };
-    } catch (error) {
-      console.error('Check account status error:', error);
-      return { isActive: true, isVerified: true, isOnline: false, isAvailable: false };
-    }
-  }
-
-  // ✅ تحديث حالة الحساب
-  async updateAccountStatus(isActive) {
-    try {
-      const response = await apiClient.put(`${this.baseUrl}/profile/status`, { isActive });
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Update account status error:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || 'فشل تحديث حالة الحساب'
-      };
-    }
-  }
-
-  // ========== دوال مساعدة ==========
-
-  normalizeOrder(order) {
-    if (!order) return null;
-
-    return {
-      ...order,
-      id: order._id,
-      statusText: this.getStatusText(order.status),
-      canCancel: ['pending', 'accepted'].includes(order.status),
-      canStart: order.status === 'accepted' || order.status === 'ready',
-      canComplete: order.status === 'picked',
-      itemCount: order.items?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0,
-      formattedTotal: this.formatCurrency(order.totalPrice),
-      createdAtFormatted: this.formatDate(order.createdAt),
-      deliveredAtFormatted: this.formatDate(order.deliveredAt)
-    };
-  }
-
-  normalizeOrders(orders) {
-    return (orders || []).map(order => this.normalizeOrder(order));
-  }
-
-  normalizeUser(user) {
-    if (!user) return null;
-
-    console.log('📊 Raw user data:', JSON.stringify(user, null, 2));
-
-    // ✅ بما أن API لا يعيد isActive و isVerified، نعتبر الحساب نشط وموثق دائماً
-    const isActiveValue = true;  // الحساب نشط دائماً
-    const isVerifiedValue = true;  // الحساب موثق دائماً
-    const isOnlineValue = user.isOnline === true;
-    const isAvailableValue = user.driverInfo?.isAvailable === true;
-
-    console.log('📊 Status values:', {
-      raw_isOnline: user.isOnline,
-      raw_isAvailable: user.driverInfo?.isAvailable,
-      computed_isActive: isActiveValue,
-      computed_isVerified: isVerifiedValue,
-      computed_isOnline: isOnlineValue,
-      computed_isAvailable: isAvailableValue
-    });
-
-    return {
-      ...user,
-      id: user._id,
-      fullName: user.name,
-      name: user.name,
-      avatar: user.image,
-      image: user.image,
-      phone: user.phone,
-      email: user.email,
-      isActive: isActiveValue,
-      isVerified: isVerifiedValue,
-      isOnline: isOnlineValue,
-      isAvailable: isAvailableValue,
-      totalDeliveries: user.driverInfo?.totalDeliveries || 0,
-      earnings: user.driverInfo?.earnings || 0,
-      rating: user.driverInfo?.rating || 0,
-      totalRatings: user.driverInfo?.totalRatings || 0,
-      currentLocation: user.driverInfo?.currentLocation,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      role: user.role || 'driver'
-    };
-  }
-
-  getStatusText(status) {
-    const statusMap = {
-      pending: 'قيد الانتظار',
-      accepted: 'تم القبول',
-      ready: 'جاهز',
-      picked: 'تم الاستلام',
-      delivered: 'تم التوصيل',
-      cancelled: 'ملغي'
-    };
-    return statusMap[status] || status;
-  }
-
-  formatCurrency(amount) {
-    if (!amount && amount !== 0) return '0 د.ع';
-    return new Intl.NumberFormat('ar-IQ').format(amount) + ' د.ع';
-  }
-
-  formatDate(date) {
-    if (!date) return null;
-    const d = new Date(date);
-    return d.toLocaleString('ar-SA');
-  }
-}
-
-export default new DriverService();
 </file>
 
 <file path="src/api/location.js">
@@ -1246,11 +789,14 @@ export const getOrderDetails = async (orderId) => {
 </file>
 
 <file path="src/api/socket.js">
-// src/api/socket.js - الإصدار المصحح
+// src/api/socket.js - يستورد الإعدادات من client.js
 import { io } from 'socket.io-client';
 import { getSecureItem } from '../utils/storage';
+import { CONFIG } from './client';  // ✅ استيراد الإعدادات من client.js
 
-const SOCKET_URL = 'https://backend-walid-yahaya.onrender.com';
+const SOCKET_URL = CONFIG.SOCKET_URL;
+
+console.log(`🔌 Using Socket: ${SOCKET_URL}`);
 
 let socket = null;
 let listeners = new Map();
@@ -1277,7 +823,7 @@ export const connectSocket = async () => {
   });
 
   socket.on('connect', () => {
-    console.log('Socket connected successfully');
+    console.log('Socket connected successfully to:', SOCKET_URL);
   });
 
   socket.on('connect_error', (error) => {
@@ -3567,166 +3113,6 @@ export default function AppNavigator() {
 }
 </file>
 
-<file path="src/screens/auth/LoginScreen.js">
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Image,
-  StyleSheet,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Button from '../../components/common/Button';
-import Input from '../../components/common/Input';
-import LoadingOverlay from '../../components/common/LoadingOverlay';
-import useAuthStore from '../../store/authStore';
-import { colors } from '../../styles/colors';
-import { typography } from '../../styles/typography';
-import { globalStyles } from '../../styles/globalStyles';
-
-export default function LoginScreen() {
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState({});
-  const { login, isLoading } = useAuthStore();
-
-  const validate = () => {
-    const newErrors = {};
-
-    if (!phone.trim()) {
-      newErrors.phone = 'رقم الهاتف مطلوب';
-    } else if (phone.length < 10) {
-      newErrors.phone = 'رقم الهاتف غير صحيح';
-    }
-
-    if (!password.trim()) {
-      newErrors.password = 'كلمة المرور مطلوبة';
-    } else if (password.length < 6) {
-      newErrors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleLogin = async () => {
-    if (!validate()) return;
-
-    const success = await login(phone, password);
-    if (!success) {
-      Alert.alert('خطأ', 'فشل تسجيل الدخول. تحقق من رقم الهاتف وكلمة المرور');
-    }
-
-    const profile = await DriverService.getProfile();
-    if (profile && !profile.isAvailable) {
-      await DriverService.toggleAvailability(true);
-    }
-  };
-
-  return (
-    <SafeAreaView style={globalStyles.safeArea}>
-      <LoadingOverlay visible={isLoading} message="جاري تسجيل الدخول..." />
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={globalStyles.container}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.logoContainer}>
-            <View style={styles.logo}>
-              <Text style={styles.logoText}>🚚</Text>
-            </View>
-            <Text style={styles.appName}>تطبيق المندوب</Text>
-            <Text style={styles.subtitle}>تسجيل الدخول إلى حسابك</Text>
-          </View>
-
-          <View style={styles.form}>
-            <Input
-              label="رقم الهاتف"
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="05XXXXXXXX"
-              keyboardType="phone-pad"
-              error={errors.phone}
-              icon={<Text style={styles.inputIcon}>📱</Text>}
-            />
-
-            <Input
-              label="كلمة المرور"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              secureTextEntry
-              error={errors.password}
-              icon={<Text style={styles.inputIcon}>🔒</Text>}
-            />
-
-            <Button
-              title="تسجيل الدخول"
-              onPress={handleLogin}
-              fullWidth
-              size="large"
-              loading={isLoading}
-              style={styles.loginButton}
-            />
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 48,
-  },
-  logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  logoText: {
-    fontSize: 48,
-  },
-  appName: {
-    fontSize: typography.h3,
-    fontWeight: typography.bold,
-    color: colors.primary,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-  },
-  form: {
-    width: '100%',
-  },
-  inputIcon: {
-    fontSize: 18,
-  },
-  loginButton: {
-    marginTop: 24,
-  },
-});
-</file>
-
 <file path="src/screens/main/ActiveOrderScreen.js">
 import React, { useState, useEffect } from 'react';
 import {
@@ -5426,1719 +4812,6 @@ const styles = StyleSheet.create({
 });
 </file>
 
-<file path="src/screens/main/OrdersScreen.js">
-// src/screens/main/OrdersScreen.js - النسخة المعدلة بالكامل
-
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
-  Alert,
-  ActivityIndicator,
-  Modal,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import OrderCard from '../../components/orders/OrderCard';
-import Header from '../../components/common/Header';
-import DriverService from '../../api/driverService';
-import { connectSocket, onEvent, offEvent } from '../../api/socket';
-import { sendLocalNotification } from '../../utils/notifications';
-import useAuthStore from '../../store/authStore';
-import { colors } from '../../styles/colors';
-import { typography } from '../../styles/typography';
-import { globalStyles } from '../../styles/globalStyles';
-import OrderStatusBadge from '../../components/orders/OrderStatusBadge';
-
-const { width, height } = Dimensions.get('window');
-
-export default function OrdersScreen() {
-  const navigation = useNavigation();
-  const [availableOrders, setAvailableOrders] = useState([]);
-  const [activeOrder, setActiveOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [processingId, setProcessingId] = useState(null);
-  const [isToggling, setIsToggling] = useState(false);
-  const [showStatusModal, setShowStatusModal] = useState(false);
-  const [statusModalMessage, setStatusModalMessage] = useState('');
-  const [flatListKey, setFlatListKey] = useState(0);
-  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
-  const { isOnline, toggleOnlineStatus, user } = useAuthStore();
-  const insets = useSafeAreaInsets();
-  const flatListRef = useRef(null);
-
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const switchAnim = useRef(new Animated.Value(isOnline ? 1 : 0)).current;
-
-  // ✅ التحقق من حالة الحساب
-  const checkAccountStatus = async () => {
-    const status = await DriverService.checkAccountStatus();
-    setAccountStatus(status);
-    
-    if (!status.isActive) {
-      Alert.alert(
-        'تنبيه',
-        'حسابك غير نشط. يرجى التواصل مع الدعم الفني.',
-        [{ text: 'حسناً' }]
-      );
-    }
-  };
-
-  useEffect(() => {
-    const initDriver = async () => {
-      await checkAccountStatus();
-      
-      // ✅ فقط إذا كان الحساب نشطاً
-      if (accountStatus.isActive) {
-        const profile = await DriverService.getProfile();
-        if (profile && !profile.isAvailable) {
-          console.log('🔄 Setting driver online on app start...');
-          await DriverService.toggleAvailability(true);
-          const { setOnlineStatus } = useAuthStore.getState();
-          setOnlineStatus(true);
-        }
-      }
-      await loadOrders();
-    };
-
-    initDriver();
-
-    if (isOnline) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [isOnline]);
-
-  useEffect(() => {
-    setFlatListKey(prev => prev + 1);
-  }, [isOnline]);
-
-  const loadOrders = useCallback(async () => {
-    try {
-      // 1. جلب الطلبات المتاحة
-      const availableResult = await DriverService.getAvailableOrders();
-      setAvailableOrders(availableResult.orders || []);
-
-      // 2. جلب الطلب النشط للمندوب
-      try {
-        const activeOrderResult = await DriverService.getActiveOrder();
-        setActiveOrder(activeOrderResult);
-
-        if (activeOrderResult) {
-          const currentRoute = navigation.getState()?.routes[navigation.getState().index]?.name;
-          if (currentRoute !== 'ActiveOrder') {
-            console.log('📢 Active order exists:', activeOrderResult.id);
-          }
-        }
-      } catch (activeError) {
-        console.log('No active order or error fetching:', activeError?.message);
-        setActiveOrder(null);
-      }
-
-    } catch (error) {
-      console.error('Load orders error:', error);
-      setAvailableOrders([]);
-      setActiveOrder(null);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [navigation]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (accountStatus.isActive) {
-        loadOrders();
-      }
-    }, [loadOrders, accountStatus.isActive])
-  );
-
-  useEffect(() => {
-    const initSocket = async () => {
-      if (isOnline && accountStatus.isActive) {
-        await connectSocket();
-
-        onEvent('driver:new-order', (data) => {
-          loadOrders();
-
-          const storeName = data?.storeName || data?.store?.name || 'متجر';
-          sendLocalNotification(
-            'طلب جديد',
-            `لديك طلب جديد من ${storeName}`,
-            { orderId: data?.orderId || data?._id }
-          );
-        });
-
-        onEvent('driver:status:changed', (data) => {
-          loadOrders();
-        });
-
-        onEvent('driver:available:orders:refresh', () => {
-          loadOrders();
-        });
-
-        onEvent('order:status:updated', (data) => {
-          if (data.orderId === activeOrder?.id || data.orderId === activeOrder?._id) {
-            loadOrders();
-          }
-        });
-      }
-    };
-
-    initSocket();
-
-    return () => {
-      offEvent('driver:new-order');
-      offEvent('driver:status:changed');
-      offEvent('driver:available:orders:refresh');
-      offEvent('order:status:updated');
-    };
-  }, [isOnline, loadOrders, activeOrder, accountStatus.isActive]);
-
-  const onRefresh = useCallback(() => {
-    if (accountStatus.isActive) {
-      setRefreshing(true);
-      loadOrders();
-    }
-  }, [loadOrders, accountStatus.isActive]);
-
-  const handleAccept = async (orderId) => {
-    if (!accountStatus.isActive) {
-      Alert.alert('تنبيه', 'حسابك غير نشط، لا يمكنك قبول الطلبات');
-      return;
-    }
-    
-    setProcessingId(orderId);
-    try {
-      const result = await DriverService.acceptOrder(orderId);
-
-      if (result.success) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        const acceptedOrderData = availableOrders.find(order =>
-          (order.id === orderId || order._id === orderId)
-        );
-
-        Alert.alert('نجاح', 'تم قبول الطلب بنجاح');
-
-        await loadOrders();
-
-        if (acceptedOrderData) {
-          navigation.navigate('ActiveOrder', {
-            order: acceptedOrderData
-          });
-        }
-      } else {
-        Alert.alert('خطأ', result.message || 'فشل قبول الطلب');
-      }
-    } catch (error) {
-      console.error('Accept order error:', error);
-      Alert.alert('خطأ', 'حدث خطأ أثناء قبول الطلب');
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleReject = async (orderId) => {
-    if (!accountStatus.isActive) {
-      Alert.alert('تنبيه', 'حسابك غير نشط');
-      return;
-    }
-    
-    setProcessingId(orderId);
-    try {
-      const result = await DriverService.rejectOrder(orderId);
-
-      if (result.success) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setAvailableOrders(prev => prev.filter(order =>
-          (order.id !== orderId && order._id !== orderId)
-        ));
-        Alert.alert('تم', 'تم رفض الطلب');
-      } else {
-        Alert.alert('خطأ', result.message || 'فشل رفض الطلب');
-      }
-    } catch (error) {
-      console.error('Reject order error:', error);
-      Alert.alert('خطأ', 'حدث خطأ أثناء رفض الطلب');
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleToggleOnline = async () => {
-    if (!accountStatus.isActive) {
-      Alert.alert('تنبيه', 'حسابك غير نشط، لا يمكنك تغيير حالة الاستقبال');
-      return;
-    }
-    
-    if (isToggling) return;
-
-    setIsToggling(true);
-    setShowStatusModal(true);
-    setStatusModalMessage(isOnline ? 'جاري إيقاف الاستقبال...' : 'جاري تفعيل الاستقبال...');
-
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (error) { }
-
-    const success = await toggleOnlineStatus();
-
-    if (success) {
-      Animated.spring(switchAnim, {
-        toValue: isOnline ? 0 : 1,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 7,
-      }).start();
-
-      setTimeout(async () => {
-        await loadOrders();
-        setShowStatusModal(false);
-      }, 800);
-    } else {
-      setShowStatusModal(false);
-    }
-
-    setIsToggling(false);
-  };
-
-  const goToActiveOrder = () => {
-    if (activeOrder) {
-      navigation.navigate('ActiveOrder', { order: activeOrder });
-    }
-  };
-
-  const StatusChangeModal = () => (
-    <Modal
-      transparent
-      visible={showStatusModal}
-      animationType="fade"
-      onRequestClose={() => setShowStatusModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.modalText}>{statusModalMessage}</Text>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // ✅ عرض الطلب النشط
-  const ActiveOrderCard = () => {
-    if (!activeOrder) return null;
-
-    const orderId = activeOrder.id || activeOrder._id;
-    const displayOrderId = orderId?.slice(-8) || '00000000';
-
-    return (
-      <TouchableOpacity onPress={goToActiveOrder} activeOpacity={0.8}>
-        <Card style={styles.activeOrderCard}>
-          <View style={styles.activeOrderHeader}>
-            <View style={styles.activeOrderBadge}>
-              <Ionicons name="bicycle" size={16} color={colors.surface} />
-              <Text style={styles.activeOrderBadgeText}>طلب نشط</Text>
-            </View>
-            <Text style={styles.activeOrderId}>#{displayOrderId}</Text>
-          </View>
-
-          <Text style={styles.activeOrderStore}>{activeOrder.store?.name || 'متجر'}</Text>
-
-          <View style={styles.activeOrderDetails}>
-            <View style={styles.activeOrderPrice}>
-              <Text style={styles.activeOrderPriceValue}>{activeOrder.totalPrice || 0} د.ع</Text>
-            </View>
-            <View style={styles.activeOrderStatus}>
-              <OrderStatusBadge status={activeOrder.status} size="small" />
-            </View>
-          </View>
-
-          <View style={styles.activeOrderButton}>
-            <Text style={styles.activeOrderButtonText}>تابع الطلب →</Text>
-          </View>
-        </Card>
-      </TouchableOpacity>
-    );
-  };
-
-  const EmptyStateComponent = () => (
-    <View style={styles.emptyContainer}>
-      <Animated.View
-        style={[
-          styles.emptyContent,
-          {
-            opacity: pulseAnim.interpolate({
-              inputRange: [1, 1.2],
-              outputRange: [1, 0.8],
-            }),
-          }
-        ]}
-      >
-        <Ionicons
-          name={isOnline && accountStatus.isActive ? "bicycle" : "fast-food-outline"}
-          size={80}
-          color={(isOnline && accountStatus.isActive) ? colors.primary : colors.textDisabled}
-        />
-        <Text style={[styles.emptyTitle, (isOnline && accountStatus.isActive) ? styles.emptyTitleOnline : styles.emptyTitleOffline]}>
-          {!accountStatus.isActive ? '⚠️ الحساب غير نشط' : (isOnline ? '✨ جاهز للاستلام ✨' : '⚠️ غير متصل')}
-        </Text>
-        <Text style={styles.emptySubtext}>
-          {!accountStatus.isActive 
-            ? 'حسابك غير نشط. يرجى التواصل مع الدعم الفني'
-            : (isOnline
-              ? 'الطلبات الجديدة ستظهر هنا تلقائياً'
-              : 'فعّل حالة الاستقبال لتبدأ باستلام الطلبات')}
-        </Text>
-        {!isOnline && accountStatus.isActive && (
-          <TouchableOpacity
-            style={styles.enableButton}
-            onPress={handleToggleOnline}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="power" size={20} color={colors.surface} />
-            <Text style={styles.enableButtonText}>تفعيل الاستقبال</Text>
-          </TouchableOpacity>
-        )}
-      </Animated.View>
-    </View>
-  );
-
-  const StatusToggleButton = () => (
-    <TouchableOpacity
-      style={[
-        styles.statusToggleButton,
-        isOnline && accountStatus.isActive ? styles.statusToggleOnline : styles.statusToggleOffline,
-      ]}
-      onPress={handleToggleOnline}
-      disabled={isToggling || !accountStatus.isActive}
-      activeOpacity={0.7}
-    >
-      <Animated.View
-        style={[
-          styles.statusToggleInner,
-          {
-            transform: [{
-              translateX: switchAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 28],
-              }),
-            }],
-          },
-        ]}
-      />
-      <View style={styles.statusToggleIcons}>
-        <Ionicons
-          name="checkmark-circle"
-          size={18}
-          color={isOnline && accountStatus.isActive ? colors.surface : colors.textDisabled}
-          style={styles.statusToggleIconLeft}
-        />
-        <Ionicons
-          name="close-circle"
-          size={18}
-          color={!isOnline && accountStatus.isActive ? colors.surface : colors.textDisabled}
-          style={styles.statusToggleIconRight}
-        />
-      </View>
-    </TouchableOpacity>
-  );
-
-  const renderHeader = () => (
-    <View style={styles.headerSection}>
-      <View style={[styles.statusCard, (isOnline && accountStatus.isActive) && styles.statusCardOnline]}>
-        <View style={styles.statusInfo}>
-          <Animated.View
-            style={[
-              styles.statusDotContainer,
-              {
-                transform: [{ scale: pulseAnim }],
-              },
-            ]}
-          >
-            <View style={[styles.statusDot, (isOnline && accountStatus.isActive) && styles.onlineDot]} />
-          </Animated.View>
-          <View>
-            <Text style={styles.statusLabel}>حالة الاستقبال</Text>
-            <Text style={[styles.statusValue, (isOnline && accountStatus.isActive) ? styles.onlineText : styles.offlineText]}>
-              {!accountStatus.isActive 
-                ? 'الحساب غير نشط' 
-                : (isOnline ? 'متصل · جاهز للطلبات' : 'غير متصل · غير متاح')}
-            </Text>
-          </View>
-        </View>
-        <StatusToggleButton />
-      </View>
-
-      <View style={styles.driverCard}>
-        <View style={[styles.driverAvatar, (isOnline && accountStatus.isActive) && styles.driverAvatarOnline]}>
-          <Text style={styles.driverAvatarText}>{user?.name?.charAt(0) || 'م'}</Text>
-          {(isOnline && accountStatus.isActive) && (
-            <View style={styles.onlineBadge}>
-              <Ionicons name="checkmark" size={10} color={colors.surface} />
-            </View>
-          )}
-        </View>
-        <View style={styles.driverInfo}>
-          <Text style={styles.driverName}>{user?.name || 'مندوب'}</Text>
-          <Text style={styles.driverPhone}>{user?.phone}</Text>
-        </View>
-        <View style={[styles.statsBadge, (isOnline && accountStatus.isActive) && styles.statsBadgeOnline]}>
-          <Text style={styles.statsNumber}>{availableOrders.length}</Text>
-          <Text style={styles.statsLabel}>طلب جديد</Text>
-        </View>
-      </View>
-
-      {/* عرض حالة التوثيق والحساب */}
-      <View style={styles.accountStatusCard}>
-        <View style={styles.accountStatusRow}>
-          <Ionicons name="checkmark-circle" size={16} color={accountStatus.isVerified ? colors.success : colors.textDisabled} />
-          <Text style={styles.accountStatusText}>
-            {accountStatus.isVerified ? 'حساب موثق' : 'حساب غير موثق'}
-          </Text>
-        </View>
-        <View style={styles.accountStatusRow}>
-          <Ionicons name="shield-checkmark" size={16} color={accountStatus.isActive ? colors.success : colors.danger} />
-          <Text style={[styles.accountStatusText, !accountStatus.isActive && styles.inactiveText]}>
-            {accountStatus.isActive ? 'حساب نشط' : 'حساب غير نشط'}
-          </Text>
-        </View>
-      </View>
-
-      {/* ✅ عرض الطلب النشط إن وجد */}
-      <ActiveOrderCard />
-
-      {(isOnline && accountStatus.isActive) && availableOrders.length > 0 && !activeOrder && (
-        <View style={styles.ordersInfoCard}>
-          <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-          <Text style={styles.ordersInfoText}>
-            {availableOrders.length} {availableOrders.length === 1 ? 'طلب جديد' : 'طلبات جديدة'} في انتظارك
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderItem = ({ item }) => {
-    const orderId = item._id || item.id;
-
-    const orderForCard = {
-      ...item,
-      id: orderId,
-      _id: orderId,
-    };
-
-    return (
-      <OrderCard
-        order={orderForCard}
-        onAccept={() => handleAccept(orderId)}
-        onReject={() => handleReject(orderId)}
-        isProcessing={processingId === orderId}
-      />
-    );
-  };
-
-  if (loading && availableOrders.length === 0 && !activeOrder) {
-    return (
-      <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
-        <Header title="الطلبات" showNotification />
-        <View style={styles.initialLoadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.initialLoadingText}>جاري تحميل الطلبات...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
-      <Header title="الطلبات" showNotification />
-
-      <StatusChangeModal />
-
-      <FlatList
-        key={flatListKey}
-        ref={flatListRef}
-        data={availableOrders}
-        keyExtractor={(item) => (item._id || item.id || Math.random().toString())}
-        ListHeaderComponent={renderHeader}
-        renderItem={renderItem}
-        ListEmptyComponent={!activeOrder ? EmptyStateComponent : null}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-            enabled={isOnline && accountStatus.isActive}
-          />
-        }
-        contentContainerStyle={[
-          styles.listContent,
-          availableOrders.length === 0 && !activeOrder && styles.emptyListContent
-        ]}
-        showsVerticalScrollIndicator={false}
-      />
-    </SafeAreaView>
-  );
-}
-
-const Card = ({ children, style, onPress }) => {
-  const Content = onPress ? TouchableOpacity : View;
-  return (
-    <Content style={[styles.card, style]} onPress={onPress} activeOpacity={0.7}>
-      {children}
-    </Content>
-  );
-};
-
-const styles = StyleSheet.create({
-  listContent: {
-    padding: 16,
-  },
-  emptyListContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  headerSection: {
-    marginBottom: 16,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statusCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.divider,
-  },
-  statusCardOnline: {
-    borderColor: colors.primaryLight,
-    backgroundColor: colors.surface,
-  },
-  statusInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  statusDotContainer: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.offline,
-  },
-  onlineDot: {
-    backgroundColor: colors.success,
-    shadowColor: colors.success,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statusLabel: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  statusValue: {
-    fontSize: typography.body2,
-    fontWeight: typography.bold,
-  },
-  onlineText: {
-    color: colors.success,
-  },
-  offlineText: {
-    color: colors.danger,
-  },
-  statusToggleButton: {
-    width: 60,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    overflow: 'hidden',
-  },
-  statusToggleOnline: {
-    backgroundColor: colors.success,
-  },
-  statusToggleOffline: {
-    backgroundColor: colors.danger,
-  },
-  statusToggleInner: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    position: 'absolute',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  statusToggleIcons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flex: 1,
-    paddingHorizontal: 4,
-  },
-  statusToggleIconLeft: {
-    opacity: 0.8,
-  },
-  statusToggleIconRight: {
-    opacity: 0.8,
-  },
-  driverCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
-    marginBottom: 12,
-  },
-  driverAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    position: 'relative',
-  },
-  driverAvatarOnline: {
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  driverAvatarText: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
-    color: colors.primary,
-  },
-  onlineBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.success,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.surface,
-  },
-  driverInfo: {
-    flex: 1,
-  },
-  driverName: {
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-    color: colors.text,
-  },
-  driverPhone: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  statsBadge: {
-    backgroundColor: colors.surfaceVariant,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
-    alignItems: 'center',
-    minWidth: 70,
-  },
-  statsBadgeOnline: {
-    backgroundColor: colors.primaryLight,
-  },
-  statsNumber: {
-    fontSize: typography.h5,
-    fontWeight: typography.bold,
-    color: colors.primary,
-  },
-  statsLabel: {
-    fontSize: typography.caption,
-    color: colors.primary,
-  },
-  accountStatusCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: colors.surfaceVariant,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  accountStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  accountStatusText: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  inactiveText: {
-    color: colors.danger,
-  },
-  ordersInfoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.primaryLight + '10',
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
-    marginTop: 0,
-    marginBottom: 12,
-  },
-  ordersInfoText: {
-    fontSize: typography.body2,
-    color: colors.primary,
-    fontWeight: typography.medium,
-    flex: 1,
-  },
-  activeOrderCard: {
-    marginBottom: 16,
-    backgroundColor: colors.primaryLight + '15',
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
-  },
-  activeOrderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  activeOrderBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  activeOrderBadgeText: {
-    fontSize: typography.caption,
-    fontWeight: typography.bold,
-    color: colors.surface,
-  },
-  activeOrderId: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  activeOrderStore: {
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 8,
-  },
-  activeOrderDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  activeOrderPrice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  activeOrderPriceValue: {
-    fontSize: typography.h6,
-    fontWeight: typography.bold,
-    color: colors.success,
-  },
-  activeOrderStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  activeOrderButton: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    alignItems: 'flex-end',
-  },
-  activeOrderButtonText: {
-    fontSize: typography.body2,
-    color: colors.primary,
-    fontWeight: typography.medium,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyContent: {
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  emptyTitleOnline: {
-    color: colors.primary,
-  },
-  emptyTitleOffline: {
-    color: colors.textDisabled,
-  },
-  emptySubtext: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  enableButton: {
-    marginTop: 24,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  enableButtonText: {
-    color: colors.surface,
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 32,
-    alignItems: 'center',
-    minWidth: 200,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalText: {
-    fontSize: typography.body1,
-    color: colors.text,
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  initialLoadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  initialLoadingText: {
-    fontSize: typography.body1,
-    color: colors.textSecondary,
-    marginTop: 16,
-  },
-});
-</file>
-
-<file path="src/screens/main/ProfileScreen.js">
-// src/screens/main/ProfileScreen.js - النسخة المعدلة بالكامل
-
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Modal,
-  TextInput,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import Header from '../../components/common/Header';
-import Button from '../../components/common/Button';
-import Card from '../../components/common/Card';
-import LoadingOverlay from '../../components/common/LoadingOverlay';
-import useAuthStore from '../../store/authStore';
-import { changePassword, updateDriverProfile } from '../../api/auth';
-import DriverService from '../../api/driverService';
-import { colors } from '../../styles/colors';
-import { typography } from '../../styles/typography';
-import { globalStyles } from '../../styles/globalStyles';
-
-export default function ProfileScreen() {
-  const { user, logout, updateProfile, stats, setStats } = useAuthStore();
-  const [loading, setLoading] = useState(false);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
-  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
-  
-  const [formData, setFormData] = useState({
-    name: user?.name || '',
-    phone: user?.phone || '',
-    email: user?.email || '',
-  });
-  
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-
-  // ✅ جلب حالة الحساب
-  const loadAccountStatus = async () => {
-    const status = await DriverService.checkAccountStatus();
-    setAccountStatus(status);
-  };
-
-  const loadStats = async () => {
-    try {
-      const history = await DriverService.getOrderHistory(1, 100);
-      const completedOrders = history.orders?.filter(o => o.status === 'delivered') || [];
-      const earnings = completedOrders.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayOrders = history.orders?.filter(o => {
-        const orderDate = new Date(o.createdAt);
-        orderDate.setHours(0, 0, 0, 0);
-        return o.status === 'delivered' && orderDate.getTime() === today.getTime();
-      }).length || 0;
-      
-      setStats({
-        todayOrders: todayOrders,
-        totalOrders: completedOrders.length,
-        rating: user?.rating || 5,
-        earnings: earnings,
-      });
-    } catch (error) {
-      console.error('Load stats error:', error);
-    }
-  };
-
-  useEffect(() => {
-    loadStats();
-    loadAccountStatus();
-  }, []);
-
-  const handleUpdateProfile = async () => {
-    setLoading(true);
-    const success = await updateProfile(formData);
-    setLoading(false);
-    
-    if (success) {
-      Alert.alert('نجاح', 'تم تحديث الملف الشخصي');
-      setEditModalVisible(false);
-    } else {
-      Alert.alert('خطأ', 'فشل تحديث الملف');
-    }
-  };
-
-  const handleChangePassword = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert('خطأ', 'كلمة المرور الجديدة غير متطابقة');
-      return;
-    }
-    
-    if (passwordData.newPassword.length < 6) {
-      Alert.alert('خطأ', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      return;
-    }
-    
-    setLoading(true);
-    const result = await changePassword(
-      passwordData.currentPassword,
-      passwordData.newPassword,
-      passwordData.confirmPassword
-    );
-    setLoading(false);
-    
-    if (result.success) {
-      Alert.alert('نجاح', 'تم تغيير كلمة المرور');
-      setPasswordModalVisible(false);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } else {
-      Alert.alert('خطأ', result.message);
-    }
-  };
-
-  const handleLogout = () => {
-    Alert.alert(
-      'تسجيل الخروج',
-      'هل أنت متأكد من تسجيل الخروج؟',
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        { text: 'تسجيل خروج', onPress: () => logout(), style: 'destructive' },
-      ]
-    );
-  };
-
-  const StatCard = ({ icon, value, label }) => (
-    <View style={styles.statCard}>
-      <Ionicons name={icon} size={24} color={colors.primary} />
-      <Text style={styles.statNumber}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-
-  return (
-    <SafeAreaView style={globalStyles.safeArea}>
-      <LoadingOverlay visible={loading} />
-      <Header title="الملف الشخصي" showNotification />
-      
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user?.name?.charAt(0) || 'م'}</Text>
-          </View>
-          <Text style={styles.name}>{user?.name || 'مندوب'}</Text>
-          <Text style={styles.phone}>{user?.phone}</Text>
-          <Text style={styles.email}>{user?.email || 'البريد الإلكتروني غير مضاف'}</Text>
-          
-          <View style={styles.editButtons}>
-            <Button
-              title="تعديل الملف"
-              onPress={() => setEditModalVisible(true)}
-              size="small"
-              style={styles.editButton}
-            />
-            <Button
-              title="تغيير كلمة المرور"
-              onPress={() => setPasswordModalVisible(true)}
-              variant="outline"
-              size="small"
-              style={styles.editButton}
-            />
-          </View>
-        </View>
-        
-        <View style={styles.statsContainer}>
-          <StatCard icon="today-outline" value={stats.todayOrders} label="طلبات اليوم" />
-          <StatCard icon="time-outline" value={stats.totalOrders} label="إجمالي الطلبات" />
-          <StatCard icon="star-outline" value={`${stats.rating}★`} label="التقييم" />
-          <StatCard icon="cash-outline" value={`${stats.earnings}`} label="الأرباح" />
-        </View>
-        
-        <Card style={styles.infoCard}>
-          <Text style={styles.infoTitle}>معلومات الحساب</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>نوع الحساب:</Text>
-            <Text style={styles.infoValue}>مندوب توصيل</Text>
-          </View>
-          
-          {/* ✅ عرض حالة التوثيق */}
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>التوثيق:</Text>
-            <Text style={[styles.infoValue, accountStatus.isVerified ? styles.verified : styles.unverified]}>
-              {accountStatus.isVerified ? 'موثق ✓' : 'غير موثق'}
-            </Text>
-          </View>
-          
-          {/* ✅ عرض حالة الحساب (نشط/غير نشط) */}
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>حالة الحساب:</Text>
-            <Text style={[styles.infoValue, accountStatus.isActive ? styles.activeStatus : styles.inactiveStatus]}>
-              {accountStatus.isActive ? 'نشط ✓' : 'غير نشط ✗'}
-            </Text>
-          </View>
-          
-          {/* ✅ عرض حالة الاتصال */}
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>حالة الاتصال:</Text>
-            <Text style={[styles.infoValue, user?.isOnline ? styles.onlineStatus : styles.offlineStatus]}>
-              {user?.isOnline ? 'متصل 🟢' : 'غير متصل ⚫'}
-            </Text>
-          </View>
-          
-          {/* ✅ عرض حالة التوفر للتوصيل */}
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>متاح للتوصيل:</Text>
-            <Text style={[styles.infoValue, user?.isAvailable ? styles.availableStatus : styles.unavailableStatus]}>
-              {user?.isAvailable ? 'متاح ✓' : 'غير متاح ✗'}
-            </Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>تاريخ الانضمام:</Text>
-            <Text style={styles.infoValue}>
-              {new Date(user?.createdAt).toLocaleDateString('ar')}
-            </Text>
-          </View>
-        </Card>
-        
-        <Button
-          title="تسجيل الخروج"
-          onPress={handleLogout}
-          variant="danger"
-          style={styles.logoutButton}
-        />
-      </ScrollView>
-      
-      {/* مودال تعديل الملف الشخصي */}
-      <Modal visible={editModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>تعديل الملف الشخصي</Text>
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="الاسم"
-              value={formData.name}
-              onChangeText={(text) => setFormData({ ...formData, name: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="رقم الهاتف"
-              value={formData.phone}
-              onChangeText={(text) => setFormData({ ...formData, phone: text })}
-              keyboardType="phone-pad"
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="البريد الإلكتروني"
-              value={formData.email}
-              onChangeText={(text) => setFormData({ ...formData, email: text })}
-              keyboardType="email-address"
-            />
-            
-            <View style={styles.modalButtons}>
-              <Button
-                title="إلغاء"
-                onPress={() => setEditModalVisible(false)}
-                variant="outline"
-                style={styles.modalButton}
-              />
-              <Button
-                title="حفظ"
-                onPress={handleUpdateProfile}
-                style={styles.modalButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-      
-      {/* مودال تغيير كلمة المرور */}
-      <Modal visible={passwordModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>تغيير كلمة المرور</Text>
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="كلمة المرور الحالية"
-              secureTextEntry
-              value={passwordData.currentPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, currentPassword: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="كلمة المرور الجديدة"
-              secureTextEntry
-              value={passwordData.newPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="تأكيد كلمة المرور الجديدة"
-              secureTextEntry
-              value={passwordData.confirmPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })}
-            />
-            
-            <View style={styles.modalButtons}>
-              <Button
-                title="إلغاء"
-                onPress={() => setPasswordModalVisible(false)}
-                variant="outline"
-                style={styles.modalButton}
-              />
-              <Button
-                title="تغيير"
-                onPress={handleChangePassword}
-                style={styles.modalButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  profileHeader: {
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatarText: {
-    fontSize: 40,
-    fontWeight: typography.bold,
-    color: colors.surface,
-  },
-  name: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 4,
-  },
-  phone: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-    marginBottom: 2,
-  },
-  email: {
-    fontSize: typography.caption,
-    color: colors.textDisabled,
-    marginBottom: 12,
-  },
-  editButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  editButton: {
-    paddingHorizontal: 16,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 20,
-    margin: 16,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-  },
-  statCard: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
-    color: colors.primary,
-    marginTop: 8,
-  },
-  statLabel: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  infoCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  infoTitle: {
-    fontSize: typography.body1,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 12,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  infoLabel: {
-    fontSize: typography.body2,
-    color: colors.textSecondary,
-  },
-  infoValue: {
-    fontSize: typography.body2,
-    color: colors.text,
-    fontWeight: typography.medium,
-  },
-  verified: {
-    color: colors.success,
-  },
-  unverified: {
-    color: colors.danger,
-  },
-  activeStatus: {
-    color: colors.success,
-  },
-  inactiveStatus: {
-    color: colors.danger,
-  },
-  onlineStatus: {
-    color: colors.success,
-  },
-  offlineStatus: {
-    color: colors.textDisabled,
-  },
-  availableStatus: {
-    color: colors.success,
-  },
-  unavailableStatus: {
-    color: colors.danger,
-  },
-  logoutButton: {
-    marginHorizontal: 16,
-    marginBottom: 32,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 20,
-    width: '90%',
-  },
-  modalTitle: {
-    fontSize: typography.h5,
-    fontWeight: typography.bold,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: typography.body2,
-    textAlign: 'right',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-  },
-});
-</file>
-
-<file path="src/store/authStore.js">
-// src/store/authStore.js - النسخة المصححة بالكامل
-
-import { create } from 'zustand';
-import DriverService from '../api/driverService';
-import { connectSocket, disconnectSocket } from '../api/socket';
-import { saveSecureItem, deleteSecureItem, getSecureItem } from '../utils/storage';
-import { login as loginApi } from '../api/auth';
-import LocationService from '../api/location';
-
-const useAuthStore = create((set, get) => ({
-  user: null,
-  isAuthenticated: false,
-  isLoading: false,
-  error: null,
-  isOnline: false,
-  stats: {
-    todayOrders: 0,
-    totalOrders: 0,
-    rating: 0,
-    earnings: 0,
-    todayEarnings: 0,
-    weeklyEarnings: 0,
-    monthlyEarnings: 0
-  },
-
-  login: async (phone, password) => {
-    set({ isLoading: true, error: null });
-
-    try {
-      const result = await loginApi(phone, password);
-
-      if (result.success && result.user) {
-        if (result.accessToken) {
-          await saveSecureItem('accessToken', result.accessToken);
-        }
-        if (result.refreshToken) {
-          await saveSecureItem('refreshToken', result.refreshToken);
-        }
-
-        const profile = await DriverService.getProfile();
-        const stats = await DriverService.getStats();
-
-        await connectSocket();
-
-        const isAccountActive = profile?.isActive === true;
-
-        if (profile?.isAvailable && isAccountActive) {
-          await LocationService.startTracking();
-        }
-
-        set({
-          user: profile,
-          isAuthenticated: true,
-          isLoading: false,
-          isOnline: (profile?.isAvailable && isAccountActive) || false,
-          stats: stats || get().stats
-        });
-
-        return true;
-      } else {
-        set({ error: result.message, isLoading: false });
-        return false;
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      set({ error: error.message || 'فشل تسجيل الدخول', isLoading: false });
-      return false;
-    }
-  },
-
-  logout: async () => {
-    await LocationService.stopTracking();
-    disconnectSocket();
-    await deleteSecureItem('accessToken');
-    await deleteSecureItem('refreshToken');
-
-    set({
-      user: null,
-      isAuthenticated: false,
-      isOnline: false,
-      stats: { todayOrders: 0, totalOrders: 0, rating: 0, earnings: 0 }
-    });
-  },
-
-  loadUser: async () => {
-    set({ isLoading: true });
-    try {
-      const token = await getSecureItem('accessToken');
-      if (!token) {
-        set({ isAuthenticated: false, isLoading: false });
-        return false;
-      }
-      
-      const profile = await DriverService.getProfile();
-      
-      if (profile) {
-        const stats = await DriverService.getStats();
-        await connectSocket();
-
-        // ✅ التحقق من أن الحساب نشط (isActive)
-        const isAccountActive = profile.isActive === true;
-        
-        console.log('📊 Profile loaded:', {
-          name: profile.name,
-          id: profile.id,
-          isActive: isAccountActive,
-          isVerified: profile.isVerified,
-          isAvailable: profile.isAvailable,
-          isOnline: profile.isOnline
-        });
-        
-        if (!isAccountActive) {
-          console.log('⚠️ Account is not active (isActive = false)');
-          set({
-            user: profile,
-            isAuthenticated: true,
-            isLoading: false,
-            isOnline: false,
-            stats: stats || get().stats
-          });
-          return true;
-        }
-
-        // ✅ فقط إذا كان الحساب نشطاً، نتحقق من حالة التوفر
-        if (!profile.isAvailable) {
-          console.log('🔄 Driver is offline, setting online automatically...');
-          const toggleResult = await DriverService.toggleAvailability(true);
-          if (toggleResult.success) {
-            profile.isAvailable = true;
-            profile.isOnline = true;
-            console.log('✅ Driver automatically set to online');
-          }
-        }
-
-        if (profile.isAvailable && isAccountActive) {
-          await LocationService.startTracking();
-        }
-        
-        set({
-          user: profile,
-          isAuthenticated: true,
-          isLoading: false,
-          isOnline: (profile.isAvailable && isAccountActive) || false,
-          stats: stats || get().stats
-        });
-        return true;
-      } else {
-        // ✅ إذا لم يتم العثور على الملف الشخصي، نقوم بتسجيل الخروج
-        await get().logout();
-        set({ isAuthenticated: false, isLoading: false });
-        return false;
-      }
-    } catch (error) {
-      console.error('Load user error:', error);
-      // ✅ في حالة الخطأ، نقوم بتسجيل الخروج
-      await get().logout();
-      set({ isAuthenticated: false, isLoading: false });
-      return false;
-    }
-  },
-
-  toggleOnlineStatus: async () => {
-    const currentState = get();
-    const isAccountActive = currentState.user?.isActive === true;
-    
-    // ✅ إذا كان الحساب غير نشط، لا يمكن تغيير الحالة
-    if (!isAccountActive) {
-      console.log('⚠️ Cannot toggle status - account is inactive');
-      return false;
-    }
-    
-    const newStatus = !currentState.isOnline;
-    console.log('🔄 Toggling online status to:', newStatus);
-
-    const result = await DriverService.toggleAvailability(newStatus);
-
-    if (result && result.success) {
-      console.log('✅ Toggle successful, updating state');
-
-      set({ isOnline: newStatus });
-
-      if (currentState.user) {
-        set({ user: { ...currentState.user, isAvailable: newStatus, isOnline: newStatus } });
-      }
-
-      if (newStatus) {
-        await LocationService.startTracking();
-      } else {
-        await LocationService.stopTracking();
-      }
-
-      setTimeout(async () => {
-        console.log('🔄 Verifying status after toggle...');
-        const freshOrders = await DriverService.getAvailableOrders();
-        console.log('📦 Status after verification:', freshOrders.isAvailable);
-      }, 500);
-
-      return true;
-    }
-
-    console.log('❌ Toggle failed');
-    return false;
-  },
-
-  updateProfile: async (profileData) => {
-    const result = await DriverService.updateProfile(profileData);
-    if (result) {
-      set({ user: { ...get().user, ...result } });
-      return true;
-    }
-    return false;
-  },
-
-  updateAvatar: async (imageFile) => {
-    const result = await DriverService.updateAvatar(imageFile);
-    if (result) {
-      set({ user: { ...get().user, avatar: result.image, image: result.image } });
-      return true;
-    }
-    return false;
-  },
-
-  setStats: (stats) => set({ stats }),
-
-  refreshStats: async () => {
-    const stats = await DriverService.getStats();
-    if (stats) {
-      set({ stats });
-    }
-    return stats;
-  },
-
-  clearError: () => set({ error: null }),
-
-  setOnlineStatus: (status) => {
-    const isAccountActive = get().user?.isActive === true;
-    if (!isAccountActive && status) {
-      console.log('⚠️ Cannot set online - account is inactive');
-      return;
-    }
-    set({ isOnline: status });
-    if (status && isAccountActive) {
-      LocationService.startTracking();
-    } else {
-      LocationService.stopTracking();
-    }
-  },
-
-  getDriverInfo: () => {
-    const { user, stats, isOnline } = get();
-    return {
-      ...user,
-      ...stats,
-      isOnline
-    };
-  }
-}));
-
-export default useAuthStore;
-</file>
-
 <file path="src/styles/colors.js">
 export const colors = {
     primary: '#f64008',
@@ -7410,8 +5083,12 @@ export const typography = {
 </file>
 
 <file path="src/utils/constants.js">
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://backend-walid-yahaya.onrender.com/api/v1';
-export const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://backend-walid-yahaya.onrender.com';
+// src/utils/constants.js - يستورد الإعدادات من client.js
+import { CONFIG } from '../api/client';
+
+// استخدام نفس الروابط من client.js
+export const API_BASE_URL = CONFIG.API_URL;
+export const SOCKET_URL = CONFIG.SOCKET_URL;
 
 // حالة الطلبات
 export const ORDER_STATUS = {
@@ -7440,6 +5117,10 @@ export const ORDER_STATUS_COLORS = {
   [ORDER_STATUS.DELIVERED]: '#4CAF50',
   [ORDER_STATUS.CANCELLED]: '#F44336',
 };
+
+// إعدادات إضافية
+export const MAPBOX_ACCESS_TOKEN = 'your_token_here';
+export const MAPBOX_STYLE_URL = 'mapbox://styles/mapbox/streets-v12';
 </file>
 
 <file path="src/utils/notifications.js">
@@ -7612,6 +5293,2106 @@ jobs:
         run: npm install
       - name: Build on EAS
         run: eas build --platform android --profile production --non-interactive
+</file>
+
+<file path="src/api/driverService.js">
+// src/api/driverService.js - النسخة النهائية المعدلة بالكامل
+
+import apiClient from './client';
+import { getSecureItem, saveSecureItem, deleteSecureItem } from '../utils/storage';
+
+class DriverService {
+  constructor() {
+    this.baseUrl = '/driver';
+    this.cachedAvailability = null;
+  }
+
+  async getProfile() {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/profile`);
+      console.log('📊 Profile API response:', JSON.stringify(response.data, null, 2));
+      const user = this.normalizeUser(response.data.data);
+      console.log('📊 Normalized user:', {
+        id: user?.id,
+        name: user?.name,
+        role: user?.role,
+        isActive: user?.isActive,
+        isVerified: user?.isVerified,
+        isAvailable: user?.isAvailable,
+        isOnline: user?.isOnline,
+        statusText: user?.statusText
+      });
+      this.cachedAvailability = user?.isAvailable || false;
+      return user;
+    } catch (error) {
+      console.error('Get profile error:', error);
+      return null;
+    }
+  }
+
+  async updateProfile(data) {
+    try {
+      const response = await apiClient.put(`${this.baseUrl}/profile`, data);
+      return response.data.data;
+    } catch (error) {
+      console.error('Update profile error:', error);
+      return null;
+    }
+  }
+
+  async updateAvatar(imageFile) {
+    try {
+      const formData = new FormData();
+      formData.append('image', {
+        uri: imageFile,
+        type: 'image/jpeg',
+        name: 'avatar.jpg'
+      });
+
+      const response = await apiClient.put(`${this.baseUrl}/profile/avatar`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return response.data.data;
+    } catch (error) {
+      console.error('Update avatar error:', error);
+      return null;
+    }
+  }
+
+  // ✅ تعديل: تبديل حالة التوفر فقط (isAvailable)
+  async toggleAvailability(isAvailable) {
+    try {
+      console.log('📤 Toggling availability:', { isAvailable });
+
+      const response = await apiClient.put(`${this.baseUrl}/availability`, {
+        isAvailable: isAvailable
+      });
+
+      console.log('✅ Toggle availability response:', response.data);
+
+      if (response.data?.success) {
+        this.cachedAvailability = isAvailable;
+      }
+
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('❌ Toggle availability error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تغيير حالة التوفر'
+      };
+    }
+  }
+
+  /**
+   * ✅ تبديل حالة الاتصال فقط (isOnline)
+   * يستخدم endpoint /driver/online
+   */
+  async toggleOnline(isOnline) {
+    try {
+      console.log('📤 Toggling online status:', { isOnline });
+
+      const response = await apiClient.put(`${this.baseUrl}/online`, {
+        isOnline: isOnline
+      });
+
+      console.log('✅ Toggle online response:', response.data);
+
+      if (response.data?.success) {
+        return { success: true, data: response.data.data };
+      }
+
+      return { success: false, message: 'فشل تغيير حالة الاتصال' };
+    } catch (error) {
+      console.error('❌ Toggle online error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تغيير حالة الاتصال'
+      };
+    }
+  }
+
+
+  // ✅ جديد: جلب الحالة التفصيلية للمندوب
+  async getDetailedStatus() {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/status`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Get detailed status error:', error);
+      return {
+        isOnline: false,
+        isAvailable: false,
+        hasActiveOrder: false,
+        statusText: 'غير متصل 📴'
+      };
+    }
+  }
+
+  async updateLocation(latitude, longitude, orderId = null) {
+    try {
+      const response = await apiClient.put(`${this.baseUrl}/location`, {
+        latitude,
+        longitude,
+        orderId
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Update location error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تحديث الموقع'
+      };
+    }
+  }
+
+  async getCurrentLocation() {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/location/current`);
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      console.error('Get current location error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل جلب الموقع الحالي'
+      };
+    }
+  }
+
+  async getOrderLocation(orderId) {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/location/order/${orderId}`);
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      console.error('Get order location error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل جلب موقع الطلب'
+      };
+    }
+  }
+
+  async getAvailableOrders() {
+    try {
+      console.log('🔄 Fetching available orders from /orders/available');
+
+      const response = await apiClient.get(`${this.baseUrl}/orders/available`);
+
+      console.log('📦 Available orders API response:', JSON.stringify(response.data, null, 2));
+
+      let orders = [];
+      let stats = {};
+      let isAvailable = false;
+      let isOnline = false;
+
+      if (response.data?.success && response.data?.data) {
+        orders = response.data.data.orders || [];
+        stats = response.data.data.stats || {};
+
+        // ✅ قراءة حالة المندوب من API
+        if (response.data.data.driverStatus) {
+          isAvailable = response.data.data.driverStatus.isAvailable || false;
+          isOnline = response.data.data.driverStatus.isOnline || false;
+        } else {
+          isAvailable = response.data.data.isAvailable || false;
+          isOnline = response.data.data.isOnline || false;
+        }
+      }
+
+      console.log(`✅ Found ${orders.length} available orders`);
+      console.log(`📊 Driver status from server: isAvailable=${isAvailable}, isOnline=${isOnline}`);
+
+      this.cachedAvailability = isAvailable;
+
+      return {
+        orders: this.normalizeOrders(orders),
+        stats: stats,
+        isAvailable: isAvailable,
+        isOnline: isOnline
+      };
+    } catch (error) {
+      console.error('❌ Get available orders error:', error);
+      return { orders: [], stats: {}, isAvailable: false, isOnline: false };
+    }
+  }
+
+  async getActiveOrder() {
+    try {
+      console.log('🔄 Fetching active order from /orders/active');
+      const response = await apiClient.get(`${this.baseUrl}/orders/active`);
+
+      if (!response.data?.data) {
+        console.log('📭 No active order found');
+        return null;
+      }
+
+      const order = this.normalizeOrder(response.data.data.order || response.data.data);
+      console.log('✅ Active order found:', order?.id);
+      return order;
+    } catch (error) {
+      if (error.response?.status === 500) {
+        console.log('⚠️ Backend error (500) on getActiveOrder - treating as no active order');
+        return null;
+      }
+      console.error('Get active order error:', error);
+      return null;
+    }
+  }
+
+  async getOrderHistory(page = 1, limit = 20) {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/orders/history`, {
+        params: { page, limit }
+      });
+      return {
+        orders: this.normalizeOrders(response.data.data?.orders || []),
+        pagination: response.data.data?.pagination || { page, limit, total: 0, pages: 0 },
+        stats: response.data.data?.stats || { totalOrders: 0, totalEarnings: 0 }
+      };
+    } catch (error) {
+      console.error('Get order history error:', error);
+      return { orders: [], pagination: { page, limit, total: 0, pages: 0 }, stats: {} };
+    }
+  }
+
+  async getOrderDetails(orderId) {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/orders/${orderId}`);
+      return this.normalizeOrder(response.data.data?.order || response.data.data);
+    } catch (error) {
+      console.error('Get order details error:', error);
+      return null;
+    }
+  }
+
+  async acceptOrder(orderId) {
+    try {
+      const response = await apiClient.put(`${this.baseUrl}/orders/${orderId}/accept`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Accept order error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل قبول الطلب'
+      };
+    }
+  }
+
+  async rejectOrder(orderId, reason = '') {
+    try {
+      const response = await apiClient.put(`${this.baseUrl}/orders/${orderId}/reject`, { reason });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Reject order error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل رفض الطلب'
+      };
+    }
+  }
+
+  async updateOrderStatus(orderId, status, location = null) {
+    try {
+      const validStatuses = ['pending', 'accepted', 'ready', 'picked', 'delivered', 'cancelled'];
+      if (!validStatuses.includes(status)) {
+        console.error('❌ Invalid status:', status);
+        return {
+          success: false,
+          message: `حالة غير صالحة: ${status}`
+        };
+      }
+
+      const payload = { status };
+
+      if (location && typeof location === 'object') {
+        if (location.latitude && location.longitude) {
+          payload.location = {
+            latitude: location.latitude,
+            longitude: location.longitude
+          };
+          console.log('📍 Adding location to payload:', payload.location);
+        }
+      }
+
+      console.log('📤 Updating order status:', { orderId, status, hasLocation: !!payload.location });
+
+      const response = await apiClient.put(`${this.baseUrl}/orders/${orderId}/status`, payload);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('❌ Update order status error:', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        data: error.response?.data
+      });
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تحديث الحالة'
+      };
+    }
+  }
+
+  async startDelivery(orderId) {
+    try {
+      const response = await apiClient.post(`${this.baseUrl}/orders/${orderId}/start`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Start delivery error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل بدء التوصيل'
+      };
+    }
+  }
+
+  async completeOrder(orderId, signature = null, deliveryPhoto = null) {
+    try {
+      const response = await apiClient.post(`${this.baseUrl}/orders/${orderId}/complete`, {
+        signature,
+        deliveryPhoto
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Complete order error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل إنهاء الطلب'
+      };
+    }
+  }
+
+  async getEarnings(period = 'week') {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/earnings`, { params: { period } });
+      return response.data.data;
+    } catch (error) {
+      console.error('Get earnings error:', error);
+      return { earnings: [], totals: { totalOrders: 0, totalEarnings: 0 } };
+    }
+  }
+
+  async getEarningsHistory(page = 1, limit = 20) {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/earnings/history`, {
+        params: { page, limit }
+      });
+      return response.data.data;
+    } catch (error) {
+      console.error('Get earnings history error:', error);
+      return { earnings: [], stats: {}, pagination: { page, limit, total: 0, pages: 0 } };
+    }
+  }
+
+  async getStats() {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/stats`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Get stats error:', error);
+      return null;
+    }
+  }
+
+  async getPerformance() {
+    try {
+      const response = await apiClient.get(`${this.baseUrl}/performance`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Get performance error:', error);
+      return null;
+    }
+  }
+
+  async checkAccountStatus() {
+    try {
+      const profile = await this.getProfile();
+      if (!profile) return { isActive: true, isVerified: true, isOnline: false, isAvailable: false };
+
+      return {
+        isActive: profile.isActive === true,
+        isVerified: profile.isVerified === true,
+        isOnline: profile.isOnline === true,
+        isAvailable: profile.isAvailable === true
+      };
+    } catch (error) {
+      console.error('Check account status error:', error);
+      return { isActive: true, isVerified: true, isOnline: false, isAvailable: false };
+    }
+  }
+
+  async updateAccountStatus(isActive) {
+    try {
+      const response = await apiClient.put(`${this.baseUrl}/profile/status`, { isActive });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Update account status error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'فشل تحديث حالة الحساب'
+      };
+    }
+  }
+
+  // ========== دوال مساعدة ==========
+
+  normalizeOrder(order) {
+    if (!order) return null;
+
+    return {
+      ...order,
+      id: order._id,
+      statusText: this.getStatusText(order.status),
+      canCancel: ['pending', 'accepted'].includes(order.status),
+      canStart: order.status === 'accepted' || order.status === 'ready',
+      canComplete: order.status === 'picked',
+      itemCount: order.items?.reduce((sum, item) => sum + (item.qty || 0), 0) || 0,
+      formattedTotal: this.formatCurrency(order.totalPrice),
+      createdAtFormatted: this.formatDate(order.createdAt),
+      deliveredAtFormatted: this.formatDate(order.deliveredAt)
+    };
+  }
+
+  normalizeOrders(orders) {
+    return (orders || []).map(order => this.normalizeOrder(order));
+  }
+
+  // ✅ دالة مساعدة لنص الحالة
+  getDriverStatusText(driver) {
+    if (driver.hasActiveOrder) return 'مشغول (في توصيلة)';
+    if (driver.isOnline && driver.isAvailable) return 'متاح ✅';
+    if (driver.isOnline && !driver.isAvailable) return 'غير متاح ⛔';
+    return 'غير متصل 📴';
+  }
+
+
+
+  normalizeUser(user) {
+    if (!user) return null;
+
+    console.log('📊 Raw user data:', JSON.stringify(user, null, 2));
+
+    const isActiveValue = user.isActive === true;
+    const isVerifiedValue = user.isVerified === true;
+    const isOnlineValue = user.isOnline === true;
+    const isAvailableValue = user.driverInfo?.isAvailable === true;
+
+    console.log('📊 Status values:', {
+      raw_isOnline: user.isOnline,
+      raw_isAvailable: user.driverInfo?.isAvailable,
+      raw_isActive: user.isActive,
+      raw_isVerified: user.isVerified,
+      computed_isActive: isActiveValue,
+      computed_isVerified: isVerifiedValue,
+      computed_isOnline: isOnlineValue,
+      computed_isAvailable: isAvailableValue
+    });
+
+    return {
+      ...user,
+      id: user._id,
+      fullName: user.name,
+      name: user.name,
+      avatar: user.image,
+      image: user.image,
+      phone: user.phone,
+      email: user.email,
+      isActive: isActiveValue,
+      isVerified: isVerifiedValue,
+      isOnline: isOnlineValue,
+      isAvailable: isAvailableValue,
+
+      statusText: this.getDriverStatusText({
+        isOnline: isOnlineValue,
+        isAvailable: isAvailableValue,
+        hasActiveOrder: false
+      }),
+
+      totalDeliveries: user.driverInfo?.totalDeliveries || 0,
+      earnings: user.driverInfo?.earnings || 0,
+      rating: user.driverInfo?.rating || 0,
+      totalRatings: user.driverInfo?.totalRatings || 0,
+      currentLocation: user.driverInfo?.currentLocation,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      role: user.role || 'driver'
+    };
+  }
+
+
+
+
+  getStatusText(status) {
+    const statusMap = {
+      pending: 'قيد الانتظار',
+      accepted: 'تم القبول',
+      ready: 'جاهز',
+      picked: 'تم الاستلام',
+      delivered: 'تم التوصيل',
+      cancelled: 'ملغي'
+    };
+    return statusMap[status] || status;
+  }
+
+  formatCurrency(amount) {
+    if (!amount && amount !== 0) return '0 د.ع';
+    return new Intl.NumberFormat('ar-IQ').format(amount) + ' د.ع';
+  }
+
+  formatDate(date) {
+    if (!date) return null;
+    const d = new Date(date);
+    return d.toLocaleString('ar-SA');
+  }
+}
+
+export default new DriverService();
+</file>
+
+<file path="src/screens/auth/LoginScreen.js">
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Image,
+  StyleSheet,
+  Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Button from '../../components/common/Button';
+import Input from '../../components/common/Input';
+import LoadingOverlay from '../../components/common/LoadingOverlay';
+import useAuthStore from '../../store/authStore';
+import { colors } from '../../styles/colors';
+import { typography } from '../../styles/typography';
+import { globalStyles } from '../../styles/globalStyles';
+
+export default function LoginScreen() {
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState({});
+  const { login, isLoading } = useAuthStore();
+
+  const validate = () => {
+    const newErrors = {};
+
+    if (!phone.trim()) {
+      newErrors.phone = 'رقم الهاتف مطلوب';
+    } else if (phone.length < 10) {
+      newErrors.phone = 'رقم الهاتف غير صحيح';
+    }
+
+    if (!password.trim()) {
+      newErrors.password = 'كلمة المرور مطلوبة';
+    } else if (password.length < 6) {
+      newErrors.password = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleLogin = async () => {
+    if (!validate()) return;
+
+    const success = await login(phone, password);
+    if (!success) {
+      Alert.alert('خطأ', 'فشل تسجيل الدخول. تحقق من رقم الهاتف وكلمة المرور');
+    }
+
+    const profile = await DriverService.getProfile();
+    if (profile && !profile.isAvailable) {
+      await DriverService.toggleAvailability(true);
+    }
+  };
+
+  return (
+    <SafeAreaView style={globalStyles.safeArea}>
+      <LoadingOverlay visible={isLoading} message="جاري تسجيل الدخول..." />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={globalStyles.container}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.logoContainer}>
+            <View style={styles.logo}>
+              <Text style={styles.logoText}>🚚</Text>
+            </View>
+            <Text style={styles.appName}>تطبيق المندوب</Text>
+            <Text style={styles.subtitle}>تسجيل الدخول إلى حسابك</Text>
+          </View>
+
+          <View style={styles.form}>
+            <Input
+              label="رقم الهاتف"
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="05XXXXXXXX"
+              keyboardType="phone-pad"
+              error={errors.phone}
+              icon={<Text style={styles.inputIcon}>📱</Text>}
+            />
+
+            <Input
+              label="كلمة المرور"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              secureTextEntry
+              error={errors.password}
+              icon={<Text style={styles.inputIcon}>🔒</Text>}
+            />
+
+            <Button
+              title="تسجيل الدخول"
+              onPress={handleLogin}
+              fullWidth
+              size="large"
+              loading={isLoading}
+              style={styles.loginButton}
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 48,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  logoText: {
+    fontSize: 48,
+  },
+  appName: {
+    fontSize: typography.h3,
+    fontWeight: typography.bold,
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: typography.body2,
+    color: colors.textSecondary,
+  },
+  form: {
+    width: '100%',
+  },
+  inputIcon: {
+    fontSize: 18,
+  },
+  loginButton: {
+    marginTop: 24,
+  },
+});
+</file>
+
+<file path="src/screens/main/OrdersScreen.js">
+// src/screens/main/OrdersScreen.js - النسخة النهائية (زر واحد فقط)
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  Alert,
+  ActivityIndicator,
+  Modal,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import OrderCard from '../../components/orders/OrderCard';
+import Header from '../../components/common/Header';
+import DriverService from '../../api/driverService';
+import { connectSocket, onEvent, offEvent } from '../../api/socket';
+import { sendLocalNotification } from '../../utils/notifications';
+import useAuthStore from '../../store/authStore';
+import { colors } from '../../styles/colors';
+import { typography } from '../../styles/typography';
+import { globalStyles } from '../../styles/globalStyles';
+import OrderStatusBadge from '../../components/orders/OrderStatusBadge';
+
+export default function OrdersScreen() {
+  const navigation = useNavigation();
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [activeOrder, setActiveOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
+  const [isToggling, setIsToggling] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusModalMessage, setStatusModalMessage] = useState('');
+  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
+  
+  // ✅ من useAuthStore - نأخذ isOnline فقط (زر الاتصال)
+  const { isOnline, toggleOnlineStatus, user } = useAuthStore();
+  
+  const flatListRef = useRef(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const switchAnim = useRef(new Animated.Value(isOnline ? 1 : 0)).current;
+
+  // ✅ حالة استقبال الطلبات (تتغير تلقائياً حسب وجود طلب جاري)
+  const canAcceptOrders = !activeOrder && isOnline;
+
+  // ✅ التحقق من حالة الحساب
+  const checkAccountStatus = async () => {
+    const status = await DriverService.checkAccountStatus();
+    setAccountStatus(status);
+
+    if (!status.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط. يرجى التواصل مع الدعم الفني.');
+    }
+  };
+
+  // ✅ تحديث حالة التوفر في الباك اند بناءً على وجود طلب جاري
+  const updateDriverAvailability = useCallback(async () => {
+    if (!accountStatus.isActive) return;
+    
+    // إذا كان متصلاً وليس لديه طلب جاري → متاح
+    // إذا كان متصلاً ولديه طلب جاري → غير متاح
+    // إذا كان غير متصل → غير متاح
+    const shouldBeAvailable = isOnline && !activeOrder;
+    
+    console.log('🔄 Updating driver availability:', {
+      isOnline,
+      hasActiveOrder: !!activeOrder,
+      shouldBeAvailable
+    });
+    
+    // ✅ تحديث حالة التوفر في الباك اند
+    await DriverService.toggleAvailability(shouldBeAvailable);
+  }, [isOnline, activeOrder, accountStatus.isActive]);
+
+  // ✅ عندما يتغير activeOrder أو isOnline، نحدث حالة التوفر
+  useEffect(() => {
+    updateDriverAvailability();
+  }, [activeOrder, isOnline, updateDriverAvailability]);
+
+  useEffect(() => {
+    const initDriver = async () => {
+      await checkAccountStatus();
+      await loadOrders();
+    };
+
+    initDriver();
+
+    if (isOnline) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isOnline]);
+
+  const loadOrders = useCallback(async () => {
+    try {
+      // 1. جلب الطلبات المتاحة
+      const availableResult = await DriverService.getAvailableOrders();
+      setAvailableOrders(availableResult.orders || []);
+
+      // 2. جلب الطلب النشط للمندوب
+      try {
+        const activeOrderResult = await DriverService.getActiveOrder();
+        setActiveOrder(activeOrderResult);
+      } catch (activeError) {
+        console.log('No active order:', activeError?.message);
+        setActiveOrder(null);
+      }
+
+    } catch (error) {
+      console.error('Load orders error:', error);
+      setAvailableOrders([]);
+      setActiveOrder(null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (accountStatus.isActive) {
+        loadOrders();
+      }
+    }, [loadOrders, accountStatus.isActive])
+  );
+
+  useEffect(() => {
+    const initSocket = async () => {
+      if (isOnline && accountStatus.isActive) {
+        await connectSocket();
+
+        onEvent('driver:new-order', (data) => {
+          loadOrders();
+          sendLocalNotification('طلب جديد', `لديك طلب جديد`, { orderId: data?.orderId });
+        });
+
+        onEvent('driver:status:changed', () => {
+          loadOrders();
+        });
+
+        onEvent('order:status:updated', (data) => {
+          if (data.orderId === activeOrder?.id || data.orderId === activeOrder?._id) {
+            loadOrders();
+          }
+        });
+      }
+    };
+
+    initSocket();
+    return () => {
+      offEvent('driver:new-order');
+      offEvent('driver:status:changed');
+      offEvent('order:status:updated');
+    };
+  }, [isOnline, loadOrders, activeOrder, accountStatus.isActive]);
+
+  const onRefresh = useCallback(() => {
+    if (accountStatus.isActive) {
+      setRefreshing(true);
+      loadOrders();
+    }
+  }, [loadOrders, accountStatus.isActive]);
+
+  const handleAccept = async (orderId) => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+
+    setProcessingId(orderId);
+    try {
+      const result = await DriverService.acceptOrder(orderId);
+
+      if (result.success) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('نجاح', 'تم قبول الطلب بنجاح');
+        await loadOrders();
+        navigation.navigate('ActiveOrder', { orderId });
+      } else {
+        Alert.alert('خطأ', result.message || 'فشل قبول الطلب');
+      }
+    } catch (error) {
+      console.error('Accept order error:', error);
+      Alert.alert('خطأ', 'حدث خطأ أثناء قبول الطلب');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (orderId) => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+
+    setProcessingId(orderId);
+    try {
+      const result = await DriverService.rejectOrder(orderId);
+
+      if (result.success) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setAvailableOrders(prev => prev.filter(order =>
+          (order.id !== orderId && order._id !== orderId)
+        ));
+        Alert.alert('تم', 'تم رفض الطلب');
+      } else {
+        Alert.alert('خطأ', result.message || 'فشل رفض الطلب');
+      }
+    } catch (error) {
+      console.error('Reject order error:', error);
+      Alert.alert('خطأ', 'حدث خطأ أثناء رفض الطلب');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // ✅ تبديل حالة الاتصال فقط (الزر الرئيسي الوحيد)
+  const handleToggleOnline = async () => {
+    if (!accountStatus.isActive) {
+      Alert.alert('تنبيه', 'حسابك غير نشط');
+      return;
+    }
+    
+    if (isToggling) return;
+    
+    setIsToggling(true);
+    setShowStatusModal(true);
+    setStatusModalMessage(isOnline ? 'جاري قطع الاتصال...' : 'جاري الاتصال...');
+    
+    const success = await toggleOnlineStatus();
+    
+    if (success) {
+      Animated.spring(switchAnim, {
+        toValue: isOnline ? 0 : 1,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 7,
+      }).start();
+      
+      setTimeout(async () => {
+        await loadOrders();
+        setShowStatusModal(false);
+      }, 500);
+    } else {
+      setShowStatusModal(false);
+    }
+    
+    setIsToggling(false);
+  };
+
+  const goToActiveOrder = () => {
+    if (activeOrder) {
+      navigation.navigate('ActiveOrder', { order: activeOrder });
+    }
+  };
+
+  // ✅ عرض الطلب النشط
+  const ActiveOrderCard = () => {
+    if (!activeOrder) return null;
+
+    const orderId = activeOrder.id || activeOrder._id;
+    const displayOrderId = orderId?.slice(-8) || '00000000';
+
+    return (
+      <TouchableOpacity onPress={goToActiveOrder} activeOpacity={0.8}>
+        <Card style={styles.activeOrderCard}>
+          <View style={styles.activeOrderHeader}>
+            <View style={styles.activeOrderBadge}>
+              <Ionicons name="bicycle" size={16} color={colors.surface} />
+              <Text style={styles.activeOrderBadgeText}>طلب نشط</Text>
+            </View>
+            <Text style={styles.activeOrderId}>#{displayOrderId}</Text>
+          </View>
+          <Text style={styles.activeOrderStore}>{activeOrder.store?.name || 'متجر'}</Text>
+          <View style={styles.activeOrderDetails}>
+            <Text style={styles.activeOrderPriceValue}>{activeOrder.totalPrice || 0} د.ع</Text>
+            <OrderStatusBadge status={activeOrder.status} size="small" />
+          </View>
+          <View style={styles.activeOrderButton}>
+            <Text style={styles.activeOrderButtonText}>تابع الطلب →</Text>
+          </View>
+        </Card>
+      </TouchableOpacity>
+    );
+  };
+
+  const StatusToggleButton = () => (
+    <TouchableOpacity
+      style={[
+        styles.statusToggleButton,
+        isOnline && accountStatus.isActive ? styles.statusToggleOnline : styles.statusToggleOffline,
+      ]}
+      onPress={handleToggleOnline}
+      disabled={isToggling || !accountStatus.isActive}
+      activeOpacity={0.7}
+    >
+      <Animated.View
+        style={[
+          styles.statusToggleInner,
+          {
+            transform: [{
+              translateX: switchAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 28],
+              }),
+            }],
+          },
+        ]}
+      />
+      <View style={styles.statusToggleTextContainer}>
+        <Text style={styles.statusToggleText}>
+          {isOnline ? '🟢 متصل' : '🔴 غير متصل'}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderHeader = () => (
+    <View style={styles.headerSection}>
+      {/* بطاقة حالة الاتصال */}
+      <View style={[styles.statusCard, (isOnline && accountStatus.isActive) && styles.statusCardOnline]}>
+        <View style={styles.statusInfo}>
+          <Animated.View style={[styles.statusDotContainer, { transform: [{ scale: pulseAnim }] }]}>
+            <View style={[styles.statusDot, (isOnline && accountStatus.isActive) && styles.onlineDot]} />
+          </Animated.View>
+          <View>
+            <Text style={styles.statusLabel}>حالة المندوب</Text>
+            <Text style={[styles.statusValue, (isOnline && accountStatus.isActive) ? styles.onlineText : styles.offlineText]}>
+              {!accountStatus.isActive ? 'الحساب غير نشط' : (isOnline ? 'متصل وجاهز' : 'غير متصل')}
+            </Text>
+          </View>
+        </View>
+        <StatusToggleButton />
+      </View>
+
+      {/* ✅ بطاقة حالة استقبال الطلبات (للإعلام فقط) */}
+      <View style={[styles.availabilityCard, canAcceptOrders ? styles.availabilityCardActive : styles.availabilityCardInactive]}>
+        <Ionicons 
+          name={canAcceptOrders ? "checkmark-circle" : "close-circle"} 
+          size={24} 
+          color={canAcceptOrders ? colors.success : colors.danger} 
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.availabilityLabel}>حالة استقبال الطلبات</Text>
+          <Text style={[styles.availabilityValue, canAcceptOrders ? styles.availabilityActive : styles.availabilityInactive]}>
+            {!isOnline ? 'غير متاح (غير متصل)' : 
+             (activeOrder ? 'غير متاح (لديك طلب جاري)' : 'متاح ✅')}
+          </Text>
+        </View>
+      </View>
+
+      {/* بطاقة المندوب */}
+      <View style={styles.driverCard}>
+        <View style={[styles.driverAvatar, (isOnline && accountStatus.isActive) && styles.driverAvatarOnline]}>
+          <Text style={styles.driverAvatarText}>{user?.name?.charAt(0) || 'م'}</Text>
+          {(isOnline && accountStatus.isActive) && (
+            <View style={styles.onlineBadge}>
+              <Ionicons name="checkmark" size={10} color={colors.surface} />
+            </View>
+          )}
+        </View>
+        <View style={styles.driverInfo}>
+          <Text style={styles.driverName}>{user?.name || 'مندوب'}</Text>
+          <Text style={styles.driverPhone}>{user?.phone}</Text>
+        </View>
+        <View style={styles.statsBadge}>
+          <Text style={styles.statsNumber}>{availableOrders.length}</Text>
+          <Text style={styles.statsLabel}>طلب جديد</Text>
+        </View>
+      </View>
+
+      {/* الطلب النشط */}
+      <ActiveOrderCard />
+
+      {/* إشعار الطلبات المتاحة */}
+      {(canAcceptOrders && availableOrders.length > 0 && !activeOrder) && (
+        <View style={styles.ordersInfoCard}>
+          <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
+          <Text style={styles.ordersInfoText}>
+            {availableOrders.length} طلب جديد في انتظارك
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderItem = ({ item }) => (
+    <OrderCard
+      order={{ ...item, id: item._id }}
+      onAccept={() => handleAccept(item._id)}
+      onReject={() => handleReject(item._id)}
+      isProcessing={processingId === item._id}
+    />
+  );
+
+  if (loading && availableOrders.length === 0 && !activeOrder) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
+        <Header title="الطلبات" showNotification />
+        <View style={styles.initialLoadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.initialLoadingText}>جاري تحميل الطلبات...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={globalStyles.safeArea} edges={['top']}>
+      <Header title="الطلبات" showNotification />
+      
+      {/* مودال التحميل */}
+      <Modal transparent visible={showStatusModal} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.modalText}>{statusModalMessage}</Text>
+          </View>
+        </View>
+      </Modal>
+      
+      <FlatList
+        ref={flatListRef}
+        data={availableOrders}
+        keyExtractor={(item) => item._id || item.id || Math.random().toString()}
+        ListHeaderComponent={renderHeader}
+        renderItem={renderItem}
+        ListEmptyComponent={!activeOrder ? EmptyStateComponent : null}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+            enabled={accountStatus.isActive}
+          />
+        }
+        contentContainerStyle={[
+          styles.listContent,
+          availableOrders.length === 0 && !activeOrder && styles.emptyListContent
+        ]}
+        showsVerticalScrollIndicator={false}
+      />
+    </SafeAreaView>
+  );
+}
+
+// ✅ حالة فارغة
+const EmptyStateComponent = () => (
+  <View style={styles.emptyContainer}>
+    <Ionicons name="bicycle-outline" size={80} color={colors.textDisabled} />
+    <Text style={styles.emptyTitle}>لا توجد طلبات</Text>
+    <Text style={styles.emptySubtext}>عند توفر طلبات جديدة، ستظهر هنا تلقائياً</Text>
+  </View>
+);
+
+const Card = ({ children, style, onPress }) => {
+  const Content = onPress ? TouchableOpacity : View;
+  return (
+    <Content style={[styles.card, style]} onPress={onPress} activeOpacity={0.7}>
+      {children}
+    </Content>
+  );
+};
+
+const styles = StyleSheet.create({
+  listContent: { padding: 16 },
+  emptyListContent: { flex: 1, justifyContent: 'center' },
+  headerSection: { marginBottom: 16 },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  
+  // بطاقة حالة الاتصال
+  statusCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.divider,
+  },
+  statusCardOnline: { borderColor: colors.primaryLight },
+  statusInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  statusDotContainer: { width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  statusDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.offline },
+  onlineDot: { backgroundColor: colors.success, shadowColor: colors.success, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 4, elevation: 2 },
+  statusLabel: { fontSize: typography.caption, color: colors.textSecondary },
+  statusValue: { fontSize: typography.body2, fontWeight: typography.bold },
+  onlineText: { color: colors.success },
+  offlineText: { color: colors.danger },
+  
+  // زر التبديل
+  statusToggleButton: {
+    width: 100,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  statusToggleOnline: { backgroundColor: colors.success },
+  statusToggleOffline: { backgroundColor: colors.danger },
+  statusToggleInner: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  statusToggleTextContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  statusToggleText: { fontSize: typography.body2, fontWeight: typography.bold, color: colors.surface },
+  
+  // ✅ بطاقة حالة استقبال الطلبات
+  availabilityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  availabilityCardActive: { backgroundColor: colors.success + '15', borderWidth: 1, borderColor: colors.success },
+  availabilityCardInactive: { backgroundColor: colors.danger + '15', borderWidth: 1, borderColor: colors.danger },
+  availabilityLabel: { fontSize: typography.caption, color: colors.textSecondary },
+  availabilityValue: { fontSize: typography.body2, fontWeight: typography.bold },
+  availabilityActive: { color: colors.success },
+  availabilityInactive: { color: colors.danger },
+  
+  driverCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  driverAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: 12, position: 'relative' },
+  driverAvatarOnline: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  driverAvatarText: { fontSize: typography.h4, fontWeight: typography.bold, color: colors.primary },
+  onlineBadge: { position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.success, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.surface },
+  driverInfo: { flex: 1 },
+  driverName: { fontSize: typography.body1, fontWeight: typography.bold, color: colors.text },
+  driverPhone: { fontSize: typography.caption, color: colors.textSecondary, marginTop: 2 },
+  statsBadge: { backgroundColor: colors.surfaceVariant, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24, alignItems: 'center', minWidth: 70 },
+  statsNumber: { fontSize: typography.h5, fontWeight: typography.bold, color: colors.primary },
+  statsLabel: { fontSize: typography.caption, color: colors.primary },
+  
+  // الطلب النشط
+  activeOrderCard: { marginBottom: 16, backgroundColor: colors.primaryLight + '15', borderWidth: 1, borderColor: colors.primaryLight },
+  activeOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  activeOrderBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  activeOrderBadgeText: { fontSize: typography.caption, fontWeight: typography.bold, color: colors.surface },
+  activeOrderId: { fontSize: typography.caption, color: colors.textSecondary },
+  activeOrderStore: { fontSize: typography.body1, fontWeight: typography.bold, color: colors.text, marginBottom: 8 },
+  activeOrderDetails: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  activeOrderPriceValue: { fontSize: typography.h6, fontWeight: typography.bold, color: colors.success },
+  activeOrderButton: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.divider, alignItems: 'flex-end' },
+  activeOrderButtonText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium },
+  
+  ordersInfoCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.primaryLight + '10', borderWidth: 1, borderColor: colors.primaryLight, padding: 12, borderRadius: 12, marginBottom: 12 },
+  ordersInfoText: { fontSize: typography.body2, color: colors.primary, fontWeight: typography.medium, flex: 1 },
+  
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  emptyTitle: { fontSize: 20, fontWeight: 'bold', color: colors.textDisabled, marginTop: 20, marginBottom: 8 },
+  emptySubtext: { fontSize: typography.body2, color: colors.textSecondary, textAlign: 'center', marginTop: 8 },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: colors.surface, borderRadius: 20, padding: 32, alignItems: 'center', minWidth: 200, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+  modalText: { fontSize: typography.body1, color: colors.text, marginTop: 16, textAlign: 'center' },
+  
+  initialLoadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  initialLoadingText: { fontSize: typography.body1, color: colors.textSecondary, marginTop: 16 },
+});
+</file>
+
+<file path="src/screens/main/ProfileScreen.js">
+// src/screens/main/ProfileScreen.js - النسخة المعدلة بالكامل
+
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  TextInput,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import Header from '../../components/common/Header';
+import Button from '../../components/common/Button';
+import Card from '../../components/common/Card';
+import LoadingOverlay from '../../components/common/LoadingOverlay';
+import useAuthStore from '../../store/authStore';
+import { changePassword, updateDriverProfile } from '../../api/auth';
+import DriverService from '../../api/driverService';
+import { colors } from '../../styles/colors';
+import { typography } from '../../styles/typography';
+import { globalStyles } from '../../styles/globalStyles';
+
+export default function ProfileScreen() {
+  const { user, logout, updateProfile, stats, setStats } = useAuthStore();
+  const [loading, setLoading] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [accountStatus, setAccountStatus] = useState({ isActive: true, isVerified: false });
+
+  const [formData, setFormData] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '',
+    email: user?.email || '',
+  });
+
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  // ✅ جلب حالة الحساب
+  const loadAccountStatus = async () => {
+    const status = await DriverService.checkAccountStatus();
+    setAccountStatus(status);
+  };
+
+  const loadStats = async () => {
+    try {
+      const history = await DriverService.getOrderHistory(1, 100);
+      const completedOrders = history.orders?.filter(o => o.status === 'delivered') || [];
+      const earnings = completedOrders.reduce((sum, order) => sum + (order.totalPrice || 0), 0);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayOrders = history.orders?.filter(o => {
+        const orderDate = new Date(o.createdAt);
+        orderDate.setHours(0, 0, 0, 0);
+        return o.status === 'delivered' && orderDate.getTime() === today.getTime();
+      }).length || 0;
+
+      setStats({
+        todayOrders: todayOrders,
+        totalOrders: completedOrders.length,
+        rating: user?.rating || 5,
+        earnings: earnings,
+      });
+    } catch (error) {
+      console.error('Load stats error:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadStats();
+    loadAccountStatus();
+  }, []);
+
+  const handleUpdateProfile = async () => {
+    setLoading(true);
+    const success = await updateProfile(formData);
+    setLoading(false);
+
+    if (success) {
+      Alert.alert('نجاح', 'تم تحديث الملف الشخصي');
+      setEditModalVisible(false);
+    } else {
+      Alert.alert('خطأ', 'فشل تحديث الملف');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      Alert.alert('خطأ', 'كلمة المرور الجديدة غير متطابقة');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      Alert.alert('خطأ', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
+    setLoading(true);
+    const result = await changePassword(
+      passwordData.currentPassword,
+      passwordData.newPassword,
+      passwordData.confirmPassword
+    );
+    setLoading(false);
+
+    if (result.success) {
+      Alert.alert('نجاح', 'تم تغيير كلمة المرور');
+      setPasswordModalVisible(false);
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } else {
+      Alert.alert('خطأ', result.message);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'تسجيل الخروج',
+      'هل أنت متأكد من تسجيل الخروج؟',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'تسجيل خروج', onPress: () => logout(), style: 'destructive' },
+      ]
+    );
+  };
+
+  const StatCard = ({ icon, value, label }) => (
+    <View style={styles.statCard}>
+      <Ionicons name={icon} size={24} color={colors.primary} />
+      <Text style={styles.statNumber}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={globalStyles.safeArea}>
+      <LoadingOverlay visible={loading} />
+      <Header title="الملف الشخصي" showNotification />
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.profileHeader}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{user?.name?.charAt(0) || 'م'}</Text>
+          </View>
+          <Text style={styles.name}>{user?.name || 'مندوب'}</Text>
+          <Text style={styles.phone}>{user?.phone}</Text>
+          <Text style={styles.email}>{user?.email || 'البريد الإلكتروني غير مضاف'}</Text>
+
+          <View style={styles.editButtons}>
+            <Button
+              title="تعديل الملف"
+              onPress={() => setEditModalVisible(true)}
+              size="small"
+              style={styles.editButton}
+            />
+            <Button
+              title="تغيير كلمة المرور"
+              onPress={() => setPasswordModalVisible(true)}
+              variant="outline"
+              size="small"
+              style={styles.editButton}
+            />
+          </View>
+        </View>
+
+        <View style={styles.statsContainer}>
+          <StatCard icon="today-outline" value={stats.todayOrders} label="طلبات اليوم" />
+          <StatCard icon="time-outline" value={stats.totalOrders} label="إجمالي الطلبات" />
+          <StatCard icon="star-outline" value={`${stats.rating}★`} label="التقييم" />
+          <StatCard icon="cash-outline" value={`${stats.earnings}`} label="الأرباح" />
+        </View>
+
+        <Card style={styles.infoCard}>
+          <Text style={styles.infoTitle}>معلومات الحساب</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>نوع الحساب:</Text>
+            <Text style={styles.infoValue}>مندوب توصيل</Text>
+          </View>
+
+          {/* ✅ عرض حالة التوثيق */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>التوثيق:</Text>
+            <Text style={[styles.infoValue, accountStatus.isVerified ? styles.verified : styles.unverified]}>
+              {accountStatus.isVerified ? 'موثق ✓' : 'غير موثق'}
+            </Text>
+          </View>
+
+          {/* ✅ عرض حالة الحساب (نشط/غير نشط) */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الحساب:</Text>
+            <Text style={[styles.infoValue, accountStatus.isActive ? styles.activeStatus : styles.inactiveStatus]}>
+              {accountStatus.isActive ? 'نشط ✓' : 'غير نشط ✗'}
+            </Text>
+          </View>
+
+          {/* ✅ عرض حالة الاتصال */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الاتصال:</Text>
+            <Text style={[styles.infoValue, user?.isOnline ? styles.onlineStatus : styles.offlineStatus]}>
+              {user?.isOnline ? 'متصل 🟢' : 'غير متصل ⚫'}
+            </Text>
+          </View>
+
+          {/* ✅ عرض حالة التوفر للتوصيل */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>حالة الاتصال:</Text>
+            <Text style={[styles.infoValue, user?.isOnline ? styles.onlineStatus : styles.offlineStatus]}>
+              {user?.isOnline ? 'متصل 🟢' : 'غير متصل ⚫'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>تاريخ الانضمام:</Text>
+            <Text style={styles.infoValue}>
+              {new Date(user?.createdAt).toLocaleDateString('ar')}
+            </Text>
+          </View>
+
+          {/* ✅ عرض نص الحالة الكامل */}
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>الحالة:</Text>
+            <Text style={[styles.infoValue, styles.statusTextValue]}>
+              {user?.statusText || 'غير محدد'}
+            </Text>
+          </View>
+
+
+
+        </Card>
+
+        <Button
+          title="تسجيل الخروج"
+          onPress={handleLogout}
+          variant="danger"
+          style={styles.logoutButton}
+        />
+      </ScrollView>
+
+      {/* مودال تعديل الملف الشخصي */}
+      <Modal visible={editModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>تعديل الملف الشخصي</Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="الاسم"
+              value={formData.name}
+              onChangeText={(text) => setFormData({ ...formData, name: text })}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="رقم الهاتف"
+              value={formData.phone}
+              onChangeText={(text) => setFormData({ ...formData, phone: text })}
+              keyboardType="phone-pad"
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="البريد الإلكتروني"
+              value={formData.email}
+              onChangeText={(text) => setFormData({ ...formData, email: text })}
+              keyboardType="email-address"
+            />
+
+            <View style={styles.modalButtons}>
+              <Button
+                title="إلغاء"
+                onPress={() => setEditModalVisible(false)}
+                variant="outline"
+                style={styles.modalButton}
+              />
+              <Button
+                title="حفظ"
+                onPress={handleUpdateProfile}
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* مودال تغيير كلمة المرور */}
+      <Modal visible={passwordModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>تغيير كلمة المرور</Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="كلمة المرور الحالية"
+              secureTextEntry
+              value={passwordData.currentPassword}
+              onChangeText={(text) => setPasswordData({ ...passwordData, currentPassword: text })}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="كلمة المرور الجديدة"
+              secureTextEntry
+              value={passwordData.newPassword}
+              onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="تأكيد كلمة المرور الجديدة"
+              secureTextEntry
+              value={passwordData.confirmPassword}
+              onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })}
+            />
+
+            <View style={styles.modalButtons}>
+              <Button
+                title="إلغاء"
+                onPress={() => setPasswordModalVisible(false)}
+                variant="outline"
+                style={styles.modalButton}
+              />
+              <Button
+                title="تغيير"
+                onPress={handleChangePassword}
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  profileHeader: {
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  avatarText: {
+    fontSize: 40,
+    fontWeight: typography.bold,
+    color: colors.surface,
+  },
+  name: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  phone: {
+    fontSize: typography.body2,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  email: {
+    fontSize: typography.caption,
+    color: colors.textDisabled,
+    marginBottom: 12,
+  },
+  editButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  editButton: {
+    paddingHorizontal: 16,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 20,
+    margin: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+  },
+  statCard: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.primary,
+    marginTop: 8,
+  },
+  statLabel: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  infoCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  infoTitle: {
+    fontSize: typography.body1,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  infoLabel: {
+    fontSize: typography.body2,
+    color: colors.textSecondary,
+  },
+  infoValue: {
+    fontSize: typography.body2,
+    color: colors.text,
+    fontWeight: typography.medium,
+  },
+  verified: {
+    color: colors.success,
+  },
+  unverified: {
+    color: colors.danger,
+  },
+  activeStatus: {
+    color: colors.success,
+  },
+  inactiveStatus: {
+    color: colors.danger,
+  },
+  onlineStatus: {
+    color: colors.success,
+  },
+  offlineStatus: {
+    color: colors.textDisabled,
+  },
+  availableStatus: {
+    color: colors.success,
+  },
+  unavailableStatus: {
+    color: colors.danger,
+  },
+  logoutButton: {
+    marginHorizontal: 16,
+    marginBottom: 32,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+  },
+  modalTitle: {
+    fontSize: typography.h5,
+    fontWeight: typography.bold,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: typography.body2,
+    textAlign: 'right',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 8,
+  },
+  modalButton: {
+    flex: 1,
+  },
+
+
+  availableStatus: {
+    color: colors.success,
+  },
+  unavailableStatus: {
+    color: colors.danger,
+  },
+  onlineStatus: {
+    color: colors.success,
+  },
+  offlineStatus: {
+    color: colors.textDisabled,
+  },
+  statusTextValue: {
+    fontWeight: typography.bold,
+  },
+});
+</file>
+
+<file path="src/store/authStore.js">
+// src/store/authStore.js - النسخة المصححة بالكامل
+
+import { create } from 'zustand';
+import DriverService from '../api/driverService';
+import { connectSocket, disconnectSocket } from '../api/socket';
+import { saveSecureItem, deleteSecureItem, getSecureItem } from '../utils/storage';
+import { login as loginApi } from '../api/auth';
+import LocationService from '../api/location';
+
+const useAuthStore = create((set, get) => ({
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+  isOnline: false,
+  stats: {
+    todayOrders: 0,
+    totalOrders: 0,
+    rating: 0,
+    earnings: 0,
+    todayEarnings: 0,
+    weeklyEarnings: 0,
+    monthlyEarnings: 0
+  },
+
+  login: async (phone, password) => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const result = await loginApi(phone, password);
+
+      if (result.success && result.user) {
+        if (result.accessToken) {
+          await saveSecureItem('accessToken', result.accessToken);
+        }
+        if (result.refreshToken) {
+          await saveSecureItem('refreshToken', result.refreshToken);
+        }
+
+        const profile = await DriverService.getProfile();
+        const stats = await DriverService.getStats();
+        const detailedStatus = await DriverService.getDetailedStatus();
+
+        await connectSocket();
+
+        const isAccountActive = profile?.isActive === true;
+
+        set({
+          user: profile,
+          isAuthenticated: true,
+          isLoading: false,
+          isOnline: detailedStatus?.isOnline || false,
+          stats: stats || get().stats
+        });
+
+        return true;
+      } else {
+        set({ error: result.message, isLoading: false });
+        return false;
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      set({ error: error.message || 'فشل تسجيل الدخول', isLoading: false });
+      return false;
+    }
+  },
+
+  logout: async () => {
+    await LocationService.stopTracking();
+    disconnectSocket();
+    await deleteSecureItem('accessToken');
+    await deleteSecureItem('refreshToken');
+
+    set({
+      user: null,
+      isAuthenticated: false,
+      isOnline: false,
+      stats: { todayOrders: 0, totalOrders: 0, rating: 0, earnings: 0 }
+    });
+  },
+
+  loadUser: async () => {
+    set({ isLoading: true });
+    try {
+      const token = await getSecureItem('accessToken');
+      if (!token) {
+        set({ isAuthenticated: false, isLoading: false });
+        return false;
+      }
+      
+      const profile = await DriverService.getProfile();
+      
+      if (profile) {
+        const stats = await DriverService.getStats();
+        const detailedStatus = await DriverService.getDetailedStatus();
+        
+        await connectSocket();
+
+        const isAccountActive = profile.isActive === true;
+        
+        console.log('📊 Profile loaded:', {
+          name: profile.name,
+          id: profile.id,
+          isActive: isAccountActive,
+          isVerified: profile.isVerified,
+          isAvailable: profile.isAvailable,
+          isOnline: detailedStatus?.isOnline
+        });
+        
+        set({
+          user: profile,
+          isAuthenticated: true,
+          isLoading: false,
+          isOnline: detailedStatus?.isOnline || false,
+          stats: stats || get().stats
+        });
+        return true;
+      } else {
+        await get().logout();
+        set({ isAuthenticated: false, isLoading: false });
+        return false;
+      }
+    } catch (error) {
+      console.error('Load user error:', error);
+      await get().logout();
+      set({ isAuthenticated: false, isLoading: false });
+      return false;
+    }
+  },
+
+
+  // ✅ تبديل حالة الاتصال (isOnline) - تستخدم endpoint /driver/online
+toggleOnlineStatus: async () => {
+  const currentState = get();
+  const isAccountActive = currentState.user?.isActive === true;
+  
+  if (!isAccountActive) {
+    console.log('⚠️ Cannot toggle online - account is inactive');
+    return false;
+  }
+  
+  const newStatus = !currentState.isOnline;
+  console.log('🔄 Toggling online status to:', newStatus);
+
+  // ✅ استخدام endpoint online الجديد
+  const result = await DriverService.toggleOnline(newStatus);
+
+  if (result && result.success) {
+    set({ isOnline: newStatus });
+    if (currentState.user) {
+      set({ 
+        user: { 
+          ...currentState.user, 
+          isOnline: newStatus 
+        } 
+      });
+    }
+    return true;
+  }
+  return false;
+},
+
+// ✅ إضافة دالة تبديل التوفر (isAvailable)
+toggleAvailability: async () => {
+  const currentState = get();
+  const isAccountActive = currentState.user?.isActive === true;
+  
+  if (!isAccountActive) {
+    console.log('⚠️ Cannot toggle availability - account is inactive');
+    return false;
+  }
+  
+  // يجب أن يكون متصلاً أولاً
+  if (!currentState.isOnline) {
+    console.log('⚠️ Cannot toggle availability - driver is offline');
+    return false;
+  }
+  
+  const newStatus = !currentState.user?.isAvailable;
+  console.log('🔄 Toggling availability to:', newStatus);
+  
+  const result = await DriverService.toggleAvailability(newStatus);
+  
+  if (result && result.success) {
+    set({ 
+      user: { ...currentState.user, isAvailable: newStatus }
+    });
+    return true;
+  }
+  return false;
+},
+
+
+  // ✅ جديد: تبديل حالة التوفر فقط (isAvailable)
+  toggleAvailability: async () => {
+    const currentState = get();
+    const isAccountActive = currentState.user?.isActive === true;
+    
+    if (!isAccountActive) {
+      console.log('⚠️ Cannot toggle availability - account is inactive');
+      return false;
+    }
+    
+    const newAvailability = !currentState.user?.isAvailable;
+    console.log('🔄 Toggling availability to:', newAvailability);
+    
+    const result = await DriverService.toggleAvailability(newAvailability);
+    
+    if (result && result.success) {
+      set({ 
+        user: { ...currentState.user, isAvailable: newAvailability }
+      });
+      return true;
+    }
+    return false;
+  },
+
+  updateProfile: async (profileData) => {
+    const result = await DriverService.updateProfile(profileData);
+    if (result) {
+      set({ user: { ...get().user, ...result } });
+      return true;
+    }
+    return false;
+  },
+
+  updateAvatar: async (imageFile) => {
+    const result = await DriverService.updateAvatar(imageFile);
+    if (result) {
+      set({ user: { ...get().user, avatar: result.image, image: result.image } });
+      return true;
+    }
+    return false;
+  },
+
+  setStats: (stats) => set({ stats }),
+
+  refreshStats: async () => {
+    const stats = await DriverService.getStats();
+    if (stats) {
+      set({ stats });
+    }
+    return stats;
+  },
+
+  clearError: () => set({ error: null }),
+
+  setOnlineStatus: (status) => {
+    const isAccountActive = get().user?.isActive === true;
+    if (!isAccountActive && status) {
+      console.log('⚠️ Cannot set online - account is inactive');
+      return;
+    }
+    set({ isOnline: status });
+  },
+
+  getDriverInfo: () => {
+    const { user, stats, isOnline } = get();
+    return {
+      ...user,
+      ...stats,
+      isOnline
+    };
+  }
+}));
+
+export default useAuthStore;
 </file>
 
 <file path="app.json">
