@@ -44,13 +44,13 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "اسمح لتطبيق المندوب بالوصول إلى موقعك لتوصيل الطلبات",
+          "locationAlwaysAndWhenInUsePermission": "نحتاج موقعك لتوصيل الطلبات - سيتم تحديث موقعك كل 10 ثوانٍ",
           "locationAlwaysPermission": "نحتاج موقعك في الخلفية لتحديث حالة التوصيل",
           "isAndroidBackgroundLocationEnabled": true,
           "isIosBackgroundLocationEnabled": true,
           "androidForegroundService": {
             "notificationTitle": "توصيل سريع",
-            "notificationBody": "جاري مشاركة موقعك لتوصيل الطلبات",
+            "notificationBody": "يتم تحديث موقعك لتوصيل الطلبات",
             "notificationColor": "#f64008"
           }
         }
@@ -59,8 +59,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#f64008",
-          "sounds": ["./assets/notification.wav"]
+          "color": "#f64008"
         }
       ],
       [
